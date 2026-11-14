@@ -1,0 +1,969 @@
+openapi: 3.1.0
+info:
+  title: SilvaStock API
+  version: 0.1.0
+  description: |
+    API do SilvaStock (showroom público + backoffice). Fonte de verdade do contrato
+    entre backend e frontend; alterada apenas pela sessão principal.
+
+    Convenções:
+    - JSON em camelCase. Datas em ISO 8601 UTC. Preços em EUR, decimal com 2 casas.
+    - Erros: `application/problem+json` (RFC 9457). Erros de validação incluem `errors`
+      (campo → mensagens).
+    - Paginação: `{ items, page, pageSize, totalCount }`, `page` começa em 1.
+    - `/api/admin/*` exige cookie de sessão de um admin ativo na allowlist.
+      Pedidos `POST/PUT/PATCH/DELETE` exigem também o cabeçalho `X-XSRF-TOKEN`
+      com o valor do cookie `XSRF-TOKEN` (emitido por `GET /api/admin/me`).
+      Sem sessão → 401; sessão fora da allowlist/inativa → 403; sem antiforgery → 400.
+    - Campos privados (`registrationNumber`, `vin`, `internalNotes`) e documentos
+      nunca aparecem em respostas `/api/public/*`.
+servers:
+  - url: http://localhost:5080
+    description: Desenvolvimento local
+tags:
+  - name: Health
+  - name: Public
+  - name: Auth
+  - name: Admin
+  - name: AdminVehicles
+  - name: AdminImages
+  - name: AdminDocuments
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check (inclui ligação à base de dados)
+      security: []
+      responses:
+        '200':
+          description: Saudável
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [Healthy, Degraded, Unhealthy] }
+        '503':
+          description: Não saudável
+
+  # ---------------------------------------------------------------- Public
+  /api/public/vehicles:
+    get:
+      tags: [Public]
+      summary: Lista paginada de veículos publicados
+      description: Devolve apenas veículos com estado `Published`. Usado pelo build do site estático.
+      security: []
+      parameters:
+        - name: q
+          in: query
+          description: Pesquisa por marca, modelo ou versão (case/acentos insensível).
+          schema: { type: string, maxLength: 100 }
+        - name: minPrice
+          in: query
+          schema: { type: number, format: decimal, minimum: 0 }
+        - name: maxPrice
+          in: query
+          schema: { type: number, format: decimal, minimum: 0 }
+        - name: year
+          in: query
+          description: Ano mínimo.
+          schema: { type: integer, minimum: 1900 }
+        - name: maxKm
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: fuel
+          in: query
+          schema: { $ref: '#/components/schemas/FuelType' }
+        - name: transmission
+          in: query
+          schema: { $ref: '#/components/schemas/Transmission' }
+        - name: sort
+          in: query
+          description: Veículos "sob consulta" ficam no fim quando se ordena por preço.
+          schema:
+            type: string
+            enum: [published_desc, price_asc, price_desc, year_desc, year_asc]
+            default: published_desc
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicVehicleSummaryPage' }
+              example:
+                items:
+                  - id: 42
+                    make: BMW
+                    model: '320d'
+                    version: Pack M
+                    year: 2019
+                    mileageKm: 98000
+                    price: 24900.00
+                    priceOnRequest: false
+                    fuel: Diesel
+                    transmission: Automatic
+                    publishedAt: '2026-11-10T09:30:00Z'
+                    primaryImage:
+                      url: https://photos.example/vehicles/42/7f3c.webp
+                      thumbUrl: https://photos.example/vehicles/42/7f3c-thumb.webp
+                      width: 1600
+                      height: 1200
+                page: 1
+                pageSize: 24
+                totalCount: 1
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /api/public/vehicles/{id}:
+    get:
+      tags: [Public]
+      summary: Detalhe público de um veículo publicado
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicVehicleDetail' }
+        '404':
+          description: Não existe ou não está `Published` (Draft e Sold dão 404).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  # ---------------------------------------------------------------- Auth
+  /api/auth/login/google:
+    get:
+      tags: [Auth]
+      summary: Inicia o login com Google (OIDC)
+      security: []
+      parameters:
+        - name: returnUrl
+          in: query
+          description: Caminho relativo dentro de `/admin` (validado; URLs absolutas são ignoradas).
+          schema: { type: string, default: /admin }
+      responses:
+        '302':
+          description: Redireciona para o Google.
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/auth/callback/google:
+    get:
+      tags: [Auth]
+      summary: Callback OIDC do Google (gerido pelo middleware de autenticação)
+      description: |
+        Valida o `id_token`, exige `email_verified = true` e um registo ativo em `admin_users`.
+        Sucesso → cria o cookie de sessão e redireciona para `returnUrl`.
+        Falha → **não** cria sessão e redireciona para `/admin/login?error=not_allowed`
+        (mensagem genérica, sem revelar se o email existe).
+      security: []
+      responses:
+        '302':
+          description: Redireciona para o site (sucesso ou erro).
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Termina a sessão
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '204':
+          description: Sessão terminada; cookie removido.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---------------------------------------------------------------- Admin
+  /api/admin/me:
+    get:
+      tags: [Admin]
+      summary: Utilizador da sessão atual
+      description: Também emite/renova o cookie `XSRF-TOKEN` usado nos pedidos que alteram estado.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminMe' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: Contadores operacionais do inventário
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/vehicles:
+    get:
+      tags: [AdminVehicles]
+      summary: Inventário (todos os estados), paginado
+      parameters:
+        - name: q
+          in: query
+          description: Pesquisa por marca, modelo, matrícula ou VIN.
+          schema: { type: string, maxLength: 100 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/VehicleStatus' }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [updated_desc, created_desc, price_asc, price_desc, year_desc]
+            default: updated_desc
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVehicleSummaryPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [AdminVehicles]
+      summary: Cria um veículo em `Draft`
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VehicleInput' }
+      responses:
+        '201':
+          description: Criado
+          headers:
+            Location:
+              schema: { type: string }
+              description: /api/admin/vehicles/{id}
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/vehicles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/VehicleId'
+    get:
+      tags: [AdminVehicles]
+      summary: Detalhe interno (inclui campos privados e imagens)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [AdminVehicles]
+      summary: Substitui os dados editáveis do veículo
+      description: |
+        O estado não muda por aqui (usar as ações). Se o veículo estiver `Published`,
+        as regras de publicação continuam a ter de se verificar (422 caso contrário)
+        e é disparado o rebuild do site.
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VehicleInput' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/PublishValidationFailed' }
+    delete:
+      tags: [AdminVehicles]
+      summary: Apaga um veículo (só em `Draft`)
+      description: Apaga também as imagens e documentos associados (BD e storage).
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '204': { description: Apagado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidState' }
+
+  /api/admin/vehicles/{id}/publish:
+    post:
+      tags: [AdminVehicles]
+      summary: Draft → Published
+      description: |
+        Valida: marca, modelo, ano, km, combustível, caixa, preço válido OU `priceOnRequest`,
+        e ≥1 foto principal. Define `publishedAt`, regista no audit log e dispara o rebuild do site.
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '200':
+          description: Publicado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidState' }
+        '422': { $ref: '#/components/responses/PublishValidationFailed' }
+
+  /api/admin/vehicles/{id}/unpublish:
+    post:
+      tags: [AdminVehicles]
+      summary: Published → Draft
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '200':
+          description: Retirado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidState' }
+
+  /api/admin/vehicles/{id}/sold:
+    post:
+      tags: [AdminVehicles]
+      summary: Published → Sold
+      description: Define `soldAt`, regista no audit log e dispara o rebuild do site.
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '200':
+          description: Marcado como vendido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidState' }
+
+  /api/admin/vehicles/{id}/reopen:
+    post:
+      tags: [AdminVehicles]
+      summary: Sold → Draft (sem confirmação extra; fica no audit log)
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '200':
+          description: Reaberto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidState' }
+
+  # ---------------------------------------------------------------- Images
+  /api/admin/vehicles/{id}/images:
+    post:
+      tags: [AdminImages]
+      summary: Carrega uma ou mais fotos
+      description: |
+        JPEG, PNG ou WebP, validados por extensão + MIME + magic bytes. Máx. 10 MB por ficheiro,
+        máx. 30 fotos por veículo. As imagens são re-codificadas (EXIF removido) e é gerado
+        um thumbnail WebP. A primeira foto de um veículo sem principal fica como principal.
+        Operação tudo-ou-nada: se um ficheiro falhar a validação, nenhum é guardado.
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  minItems: 1
+                  maxItems: 30
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: Fotos criadas; devolve a lista completa e ordenada.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AdminVehicleImage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+
+  /api/admin/vehicles/{id}/images/order:
+    patch:
+      tags: [AdminImages]
+      summary: Reordena as fotos
+      description: '`imageIds` tem de conter exatamente todas as fotos do veículo, pela nova ordem.'
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imageIds]
+              properties:
+                imageIds:
+                  type: array
+                  items: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AdminVehicleImage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/admin/vehicles/{id}/images/{imageId}/primary:
+    put:
+      tags: [AdminImages]
+      summary: Define a foto principal
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/ImageId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AdminVehicleImage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Veículo não existe, ou a imagem não pertence a este veículo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /api/admin/vehicles/{id}/images/{imageId}:
+    delete:
+      tags: [AdminImages]
+      summary: Apaga uma foto
+      description: |
+        Se for a principal, a seguinte (por `sortOrder`) passa a principal.
+        Num veículo `Published` não é possível apagar a última foto (409).
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/ImageId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '204': { description: Apagada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidState' }
+
+  # ---------------------------------------------------------------- Documents
+  /api/admin/vehicles/{id}/documents:
+    parameters:
+      - $ref: '#/components/parameters/VehicleId'
+    get:
+      tags: [AdminDocuments]
+      summary: Lista os documentos privados do veículo
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/VehicleDocument' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [AdminDocuments]
+      summary: Carrega um documento privado
+      description: PDF, JPEG ou PNG (validados por magic bytes). Máx. 15 MB. Guardado no bucket privado.
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, category]
+              properties:
+                file: { type: string, format: binary }
+                category: { $ref: '#/components/schemas/DocumentCategory' }
+                displayName:
+                  type: string
+                  maxLength: 200
+                  description: Se omitido, usa o nome do ficheiro sanitizado.
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VehicleDocument' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+
+  /api/admin/vehicles/{id}/documents/{docId}/download:
+    get:
+      tags: [AdminDocuments]
+      summary: Descarrega um documento (URL pré-assinada curta)
+      description: |
+        Verifica a sessão e que `docId` pertence a `id` (anti-IDOR) antes de emitir uma
+        URL pré-assinada de curta duração (≈60 s) com `Content-Disposition: attachment`.
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '302':
+          description: Redireciona para a URL pré-assinada.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+            Cache-Control:
+              schema: { type: string, example: no-store }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Veículo/documento inexistente ou documento de outro veículo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /api/admin/vehicles/{id}/documents/{docId}:
+    delete:
+      tags: [AdminDocuments]
+      summary: Apaga um documento
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '204': { description: Apagado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-silvastock-auth
+      description: Cookie HttpOnly, Secure, SameSite=Lax emitido após login Google.
+
+  parameters:
+    VehicleId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    ImageId:
+      name: imageId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    DocumentId:
+      name: docId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 24 }
+    XsrfHeader:
+      name: X-XSRF-TOKEN
+      in: header
+      required: true
+      description: Valor do cookie `XSRF-TOKEN`.
+      schema: { type: string }
+
+  responses:
+    ValidationError:
+      description: Pedido inválido (formato, limites, campos).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ValidationProblemDetails' }
+    Unauthorized:
+      description: Sem sessão válida.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    Forbidden:
+      description: Sessão válida mas o utilizador não está ativo na allowlist.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    NotFound:
+      description: Recurso inexistente.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    InvalidState:
+      description: A operação não é permitida no estado atual do veículo.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+          example:
+            type: https://silvastock.dev/problems/invalid-state-transition
+            title: Transição de estado inválida
+            status: 409
+            detail: Não é possível marcar como vendido um veículo em Draft.
+    PublishValidationFailed:
+      description: O veículo não cumpre as regras de publicação.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/PublishProblemDetails' }
+          example:
+            type: https://silvastock.dev/problems/publish-validation
+            title: O veículo não pode ser publicado
+            status: 422
+            missingFields: [price, primaryImage]
+            errors:
+              price: [Indique um preço ou selecione "sob consulta".]
+              primaryImage: [É necessária uma foto principal.]
+    PayloadTooLarge:
+      description: Ficheiro ou pedido acima do limite.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    UnsupportedMediaType:
+      description: Tipo de ficheiro não aceite (conteúdo real não corresponde a um formato permitido).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    TooManyRequests:
+      description: Limite de pedidos excedido.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  schemas:
+    # ---- enums
+    VehicleStatus:
+      type: string
+      enum: [Draft, Published, Sold]
+    FuelType:
+      type: string
+      enum: [Petrol, Diesel, Hybrid, PlugInHybrid, Electric, Lpg, Other]
+    Transmission:
+      type: string
+      enum: [Manual, Automatic]
+    Drivetrain:
+      type: string
+      enum: [FWD, RWD, AWD]
+    BodyType:
+      type: string
+      enum: [Hatchback, Sedan, Wagon, Suv, Coupe, Convertible, Mpv, Van, Pickup, Other]
+    DocumentCategory:
+      type: string
+      enum: [RegistrationDocument, Inspection, Maintenance, Warranty, Purchase, Other]
+      description: RegistrationDocument = DUA.
+
+    # ---- errors
+    ProblemDetails:
+      type: object
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        traceId: { type: string }
+    ValidationProblemDetails:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            errors:
+              type: object
+              additionalProperties:
+                type: array
+                items: { type: string }
+    PublishProblemDetails:
+      allOf:
+        - $ref: '#/components/schemas/ValidationProblemDetails'
+        - type: object
+          required: [missingFields]
+          properties:
+            missingFields:
+              type: array
+              items:
+                type: string
+                enum: [make, model, year, mileageKm, fuel, transmission, price, primaryImage]
+
+    # ---- images
+    PublicImage:
+      type: object
+      required: [url, thumbUrl]
+      properties:
+        url: { type: string, format: uri }
+        thumbUrl: { type: string, format: uri }
+        width: { type: integer }
+        height: { type: integer }
+    AdminVehicleImage:
+      type: object
+      required: [id, url, thumbUrl, sortOrder, isPrimary, contentType, sizeBytes]
+      properties:
+        id: { type: integer, format: int64 }
+        url: { type: string, format: uri }
+        thumbUrl: { type: string, format: uri }
+        width: { type: integer }
+        height: { type: integer }
+        contentType: { type: string, example: image/webp }
+        sizeBytes: { type: integer, format: int64 }
+        sortOrder: { type: integer }
+        isPrimary: { type: boolean }
+
+    # ---- public vehicles
+    PublicVehicleSummary:
+      type: object
+      required: [id, make, model, year, mileageKm, priceOnRequest, fuel, transmission, publishedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        make: { type: string }
+        model: { type: string }
+        version: { type: [string, 'null'] }
+        year: { type: integer }
+        mileageKm: { type: integer }
+        price:
+          type: [number, 'null']
+          format: decimal
+          description: null quando `priceOnRequest` é true.
+        priceOnRequest: { type: boolean }
+        fuel: { $ref: '#/components/schemas/FuelType' }
+        transmission: { $ref: '#/components/schemas/Transmission' }
+        publishedAt: { type: string, format: date-time }
+        primaryImage: { $ref: '#/components/schemas/PublicImage' }
+    PublicVehicleDetail:
+      allOf:
+        - $ref: '#/components/schemas/PublicVehicleSummary'
+        - type: object
+          required: [images]
+          properties:
+            engineCc: { type: [integer, 'null'] }
+            powerKw: { type: [integer, 'null'] }
+            bodyType:
+              oneOf:
+                - $ref: '#/components/schemas/BodyType'
+                - type: 'null'
+            color: { type: [string, 'null'] }
+            interiorColor: { type: [string, 'null'] }
+            doors: { type: [integer, 'null'] }
+            seats: { type: [integer, 'null'] }
+            drivetrain:
+              oneOf:
+                - $ref: '#/components/schemas/Drivetrain'
+                - type: 'null'
+            emissions: { type: [string, 'null'], description: 'Ex.: "Euro 6d" ou "120 g/km".' }
+            description: { type: [string, 'null'] }
+            equipment:
+              type: array
+              items: { type: string }
+            images:
+              type: array
+              description: Ordenadas por sortOrder; a principal primeiro.
+              items: { $ref: '#/components/schemas/PublicImage' }
+    PublicVehicleSummaryPage:
+      type: object
+      required: [items, page, pageSize, totalCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PublicVehicleSummary' }
+        page: { type: integer }
+        pageSize: { type: integer }
+        totalCount: { type: integer }
+
+    # ---- admin vehicles
+    VehicleInput:
+      type: object
+      description: |
+        Dados editáveis. Para guardar em Draft só `make` e `model` são obrigatórios;
+        os restantes obrigatórios para publicar são validados nas transições.
+      required: [make, model]
+      properties:
+        make: { type: string, minLength: 1, maxLength: 60 }
+        model: { type: string, minLength: 1, maxLength: 60 }
+        version: { type: [string, 'null'], maxLength: 120 }
+        year: { type: [integer, 'null'], minimum: 1900, description: 'Máximo: ano corrente + 1.' }
+        mileageKm: { type: [integer, 'null'], minimum: 0, maximum: 2000000 }
+        price: { type: [number, 'null'], format: decimal, minimum: 0, maximum: 99999999.99 }
+        priceOnRequest: { type: boolean, default: false }
+        fuel:
+          oneOf:
+            - $ref: '#/components/schemas/FuelType'
+            - type: 'null'
+        transmission:
+          oneOf:
+            - $ref: '#/components/schemas/Transmission'
+            - type: 'null'
+        engineCc: { type: [integer, 'null'], minimum: 0, maximum: 10000 }
+        powerKw: { type: [integer, 'null'], minimum: 0, maximum: 2000 }
+        bodyType:
+          oneOf:
+            - $ref: '#/components/schemas/BodyType'
+            - type: 'null'
+        color: { type: [string, 'null'], maxLength: 40 }
+        interiorColor: { type: [string, 'null'], maxLength: 40 }
+        doors: { type: [integer, 'null'], minimum: 1, maximum: 7 }
+        seats: { type: [integer, 'null'], minimum: 1, maximum: 9 }
+        drivetrain:
+          oneOf:
+            - $ref: '#/components/schemas/Drivetrain'
+            - type: 'null'
+        emissions: { type: [string, 'null'], maxLength: 40 }
+        description: { type: [string, 'null'], maxLength: 5000 }
+        equipment:
+          type: array
+          maxItems: 100
+          default: []
+          description: Lista de extras/equipamento (ex. "Ar condicionado automático").
+          items: { type: string, minLength: 1, maxLength: 100 }
+        registrationNumber: { type: [string, 'null'], maxLength: 16, description: Privado. }
+        vin:
+          type: [string, 'null']
+          pattern: '^[A-HJ-NPR-Z0-9]{17}$'
+          description: Privado. 17 caracteres, sem I/O/Q.
+        internalNotes: { type: [string, 'null'], maxLength: 5000, description: Privado. }
+    AdminVehicleSummary:
+      type: object
+      required: [id, status, make, model, priceOnRequest, imageCount, updatedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        status: { $ref: '#/components/schemas/VehicleStatus' }
+        make: { type: string }
+        model: { type: string }
+        version: { type: [string, 'null'] }
+        year: { type: [integer, 'null'] }
+        mileageKm: { type: [integer, 'null'] }
+        price: { type: [number, 'null'], format: decimal }
+        priceOnRequest: { type: boolean }
+        registrationNumber: { type: [string, 'null'] }
+        primaryThumbUrl: { type: [string, 'null'], format: uri }
+        imageCount: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    AdminVehicleSummaryPage:
+      type: object
+      required: [items, page, pageSize, totalCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminVehicleSummary' }
+        page: { type: integer }
+        pageSize: { type: integer }
+        totalCount: { type: integer }
+    AdminVehicleDetail:
+      allOf:
+        - $ref: '#/components/schemas/VehicleInput'
+        - type: object
+          required: [id, status, images, createdAt, updatedAt, createdBy, updatedBy]
+          properties:
+            id: { type: integer, format: int64 }
+            status: { $ref: '#/components/schemas/VehicleStatus' }
+            publishedAt: { type: [string, 'null'], format: date-time }
+            soldAt: { type: [string, 'null'], format: date-time }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            createdBy: { type: string, description: Email do admin. }
+            updatedBy: { type: string, description: Email do admin. }
+            images:
+              type: array
+              items: { $ref: '#/components/schemas/AdminVehicleImage' }
+            publishReadiness:
+              type: array
+              description: Campos em falta para publicar (vazio = pode publicar).
+              items: { type: string }
+
+    # ---- documents
+    VehicleDocument:
+      type: object
+      required: [id, vehicleId, category, displayName, contentType, sizeBytes, uploadedAt, uploadedBy]
+      properties:
+        id: { type: integer, format: int64 }
+        vehicleId: { type: integer, format: int64 }
+        category: { $ref: '#/components/schemas/DocumentCategory' }
+        displayName: { type: string }
+        contentType: { type: string, enum: [application/pdf, image/jpeg, image/png] }
+        sizeBytes: { type: integer, format: int64 }
+        uploadedAt: { type: string, format: date-time }
+        uploadedBy: { type: string }
+
+    # ---- admin misc
+    AdminMe:
+      type: object
+      required: [email, displayName]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string }
+    Dashboard:
+      type: object
+      required: [total, draft, published, sold]
+      properties:
+        total: { type: integer }
+        draft: { type: integer }
+        published: { type: integer }
+        sold: { type: integer }
+
+security:
+  - cookieAuth: []
