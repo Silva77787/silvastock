@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>silvastock-api</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SilvaStock.Application\SilvaStock.Application.csproj" />
+    <ProjectReference Include="..\SilvaStock.Infrastructure\SilvaStock.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SilvaStock.IntegrationTests" />
+  </ItemGroup>
+</Project>

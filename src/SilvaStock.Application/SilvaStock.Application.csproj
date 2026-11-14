@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\SilvaStock.Domain\SilvaStock.Domain.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>silvastock</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SilvaStock.Application\SilvaStock.Application.csproj" />
+    <ProjectReference Include="..\SilvaStock.Infrastructure\SilvaStock.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>
