@@ -3,8 +3,8 @@
 Public showroom + back office for **one** used-car dealership (2–3 administrators). EUR.
 
 ## Language
-- **English:** code, identifiers, routes, statuses, commits, docs, ADRs, OpenAPI, GitHub issues/PRs.
-- **Portuguese (pt-PT):** all UI text seen by visitors and admins, and public URL segments (e.g. `/carros/`).
+- **English:** code, identifiers, commits, docs, ADRs, GitHub issues/PRs, and every API resource: routes (`/api/admin/vehicles`, never `/carros`), DTOs, fields, enums, statuses, log messages.
+- **Portuguese (pt-PT):** all frontend UI text, frontend URLs (e.g. `/carros/42-bmw-320d-2019`), and user-facing API error messages (ProblemDetails `title`/`detail`, validation messages).
 
 ## Sources of truth (in order of precedence)
 1. `docs/DECISIONS.md` — approved decisions. Overrides everything else.

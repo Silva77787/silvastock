@@ -7,7 +7,7 @@
 ## 1. Product
 Public showroom + back office for ONE used-car dealership, used by the owner and family members (2–3 people).
 Goals: professional portfolio and possible real-world use. Currency: EUR.
-Language: documentation, code and GitHub in **English**; the UI shown to visitors and admins in **Portuguese (pt-PT)**.
+Language: documentation, code and GitHub in **English**. The API is always in English: routes/resources (e.g. `/api/admin/vehicles`, never `/carros`), DTOs, fields and enums. **Portuguese (pt-PT)**: the frontend UI and its URLs (e.g. `/carros/`), and the user-facing API error messages (ProblemDetails `title`/`detail`, validation messages).
 Modular monolith. No microservices. No features outside the MVP without justification.
 
 ## 2. Constraints
