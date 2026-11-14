@@ -1,0 +1,49 @@
+# ---- .NET ----
+bin/
+obj/
+*.user
+*.suo
+*.rsuser
+.vs/
+TestResults/
+*.trx
+coverage/
+coverage*.xml
+*.coverage
+*.nupkg
+artifacts/
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+web/next-env.d.ts
+*.tsbuildinfo
+npm-debug.log*
+.pnpm-debug.log*
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# ---- Secrets and local environment ----
+.env
+.env.*
+!.env.example
+*.pfx
+*.pem
+*.key
+appsettings.*.local.json
+secrets.json
+
+# ---- Editors / OS ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- Claude Code (keep shared agents and settings, ignore local state) ----
+.claude/settings.local.json
+.claude/worktrees/
