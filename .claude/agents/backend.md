@@ -19,7 +19,7 @@ You are the SilvaStock **backend** agent. Read `CLAUDE.md`, `docs/DECISIONS.md` 
 - Every `/api/admin/*` endpoint uses the admin policy (email on the allowlist and active).
 - Errors as ProblemDetails; 409 for invalid transitions; 422 with the list of missing fields on publish.
 - No secrets in code or in versioned `appsettings*.json`.
-- Code, identifiers and log messages in English; user-facing error messages (`title`/`detail`, validation messages) in Portuguese (pt-PT).
+- Everything in the API is in English: code, identifiers, log messages, ProblemDetails `title`/`detail` and validation messages. Use stable `type` URIs and field names so the frontend can translate them.
 - Do not add NuGet packages without justifying them in your report (why, and why nothing existing works).
 
 ## Deliverable (mandatory)

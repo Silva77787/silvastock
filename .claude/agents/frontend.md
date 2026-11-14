@@ -17,6 +17,7 @@ You are the SilvaStock **frontend** agent. Read `CLAUDE.md`, `docs/DECISIONS.md`
 - Back office under `/admin`: `fetch` with `credentials: 'include'` and the antiforgery header on state-changing requests. **Never** store tokens in `localStorage`/`sessionStorage`.
 - API types generated from `openapi.yaml`; never write them by hand.
 - Code and identifiers in English; **all UI text in Portuguese (pt-PT)**; prices in EUR with `Intl.NumberFormat` (`pt-PT`).
+- API errors arrive in English: never show them raw. Map the ProblemDetails `type`, `missingFields` and `errors` keys to pt-PT messages (with a generic pt-PT fallback).
 - WCAG 2.2 AA accessibility: semantics, labels, visible focus, contrast, alternative text.
 - No hard-coded data pretending to be the API. Loading, empty and error states handled.
 - Component tests with Vitest + React Testing Library inside `web/`.
