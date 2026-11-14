@@ -9,7 +9,7 @@ info:
     Conventions:
     - JSON in camelCase. Dates in ISO 8601 UTC. Prices in EUR, decimal with 2 places.
     - Errors: `application/problem+json` (RFC 9457). Validation errors include `errors`
-      (field → messages). All messages are in English; clients localise them by `type` and field name.
+      (field → messages). User-facing `title`, `detail` and messages are in Portuguese (pt-PT).
     - Pagination: `{ items, page, pageSize, totalCount }`, `page` starts at 1.
     - `/api/admin/*` requires a session cookie for an admin who is active on the allowlist.
       `POST/PUT/PATCH/DELETE` requests also require the `X-XSRF-TOKEN` header
@@ -663,9 +663,9 @@ components:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
           example:
             type: https://silvastock.dev/problems/invalid-state-transition
-            title: Invalid state transition
+            title: Transição de estado inválida
             status: 409
-            detail: A vehicle in Draft cannot be marked as sold.
+            detail: Não é possível marcar como vendido um veículo em Draft.
     PublishValidationFailed:
       description: The vehicle does not meet the publish rules.
       content:
@@ -673,12 +673,12 @@ components:
           schema: { $ref: '#/components/schemas/PublishProblemDetails' }
           example:
             type: https://silvastock.dev/problems/publish-validation
-            title: The vehicle cannot be published
+            title: O veículo não pode ser publicado
             status: 422
             missingFields: [price, primaryImage]
             errors:
-              price: [Set a price or enable priceOnRequest.]
-              primaryImage: [A primary photo is required.]
+              price: [Indique um preço ou selecione "sob consulta".]
+              primaryImage: [É necessária uma foto principal.]
     PayloadTooLarge:
       description: File or request above the limit.
       content:
@@ -878,7 +878,7 @@ components:
           type: array
           maxItems: 100
           default: []
-          description: List of extras/equipment (free text entered by admins, e.g. "Automatic climate control").
+          description: List of extras/equipment, in Portuguese (e.g. "Ar condicionado automático").
           items: { type: string, minLength: 1, maxLength: 100 }
         registrationNumber: { type: [string, 'null'], maxLength: 16, description: Private. }
         vin:
