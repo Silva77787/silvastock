@@ -1,0 +1,15 @@
+[
+["text.primary","bg.canvas","Body text",4.5],["text.primary","bg.surface","Body text on cards",4.5],["text.primary","bg.raised","Text in dialogs/toasts",4.5],["text.primary","bg.muted","Text on hover rows/chips",4.5],
+["text.secondary","bg.canvas","Secondary text",4.5],["text.secondary","bg.subtle","Secondary text on grid bg",4.5],["text.secondary","bg.surface","Meta lines on cards",4.5],["text.secondary","bg.raised","Secondary text in dialogs",4.5],["text.secondary","bg.muted","Secondary text on muted",4.5],
+["text.link","bg.canvas","Links",4.5],["text.link","bg.surface","Links on cards",4.5],["text.link","bg.subtle","Links on grid bg",4.5],
+["action.primary.fg","action.primary.bg","Primary button label",4.5],["action.primary.fg","action.primary.bgHover","Primary button hover",4.5],["action.primary.fg","action.primary.bgActive","Primary button pressed",4.5],
+["action.primary.bg","bg.canvas","Primary button edge vs page",3],["action.primary.bg","bg.surface","Primary button/checkbox fill vs card",3],
+["action.danger.fg","action.danger.bg","Danger button label",4.5],["action.danger.fg","action.danger.bgHover","Danger button hover",4.5],
+["action.selected.fg","action.selected.bg","Selected nav/chip",4.5],
+["accent.price","bg.surface","Price on cards",4.5],["accent.price","bg.canvas","Price on detail page",4.5],["accent.price","bg.subtle","Price on grid bg",4.5],["accent.fg","accent.bg","Accent tag",4.5],
+["border.strong","bg.surface","Input borders",3],["border.strong","bg.canvas","Input borders on page",3],["border.strong","bg.raised","Input borders in dialogs",3],
+["feedback.success.fg","feedback.success.bg","Success banner/toast icon+text",4.5],["feedback.warning.fg","feedback.warning.bg","Warning banner",4.5],["feedback.danger.fg","feedback.danger.bg","Error banner",4.5],["feedback.info.fg","feedback.info.bg","Info banner",4.5],
+["feedback.danger.fg","bg.surface","Inline field error",4.5],["feedback.danger.fg","bg.raised","Field error in dialog",4.5],["feedback.success.fg","bg.raised","Toast icon",3],
+["status.draft.fg","status.draft.bg","Badge Rascunho",4.5],["status.published.fg","status.published.bg","Badge Publicado",4.5],["status.sold.fg","status.sold.bg","Badge Vendido",4.5],
+["focus.ring","bg.canvas","Focus ring",3],["focus.ring","bg.surface","Focus ring on cards",3],["focus.ring","bg.muted","Focus ring on muted",3],["focus.ring","bg.raised","Focus ring in dialogs",3]
+]
