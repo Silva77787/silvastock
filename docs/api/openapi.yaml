@@ -3,23 +3,23 @@ info:
   title: SilvaStock API
   version: 0.1.0
   description: |
-    API do SilvaStock (showroom público + backoffice). Fonte de verdade do contrato
-    entre backend e frontend; alterada apenas pela sessão principal.
+    SilvaStock API (public showroom + back office). Source of truth for the contract
+    between backend and frontend; changed only by the main session. Draft: each phase closes its own endpoints with the owner before implementation.
 
-    Convenções:
-    - JSON em camelCase. Datas em ISO 8601 UTC. Preços em EUR, decimal com 2 casas.
-    - Erros: `application/problem+json` (RFC 9457). Erros de validação incluem `errors`
-      (campo → mensagens).
-    - Paginação: `{ items, page, pageSize, totalCount }`, `page` começa em 1.
-    - `/api/admin/*` exige cookie de sessão de um admin ativo na allowlist.
-      Pedidos `POST/PUT/PATCH/DELETE` exigem também o cabeçalho `X-XSRF-TOKEN`
-      com o valor do cookie `XSRF-TOKEN` (emitido por `GET /api/admin/me`).
-      Sem sessão → 401; sessão fora da allowlist/inativa → 403; sem antiforgery → 400.
-    - Campos privados (`registrationNumber`, `vin`, `internalNotes`) e documentos
-      nunca aparecem em respostas `/api/public/*`.
+    Conventions:
+    - JSON in camelCase. Dates in ISO 8601 UTC. Prices in EUR, decimal with 2 places.
+    - Errors: `application/problem+json` (RFC 9457). Validation errors include `errors`
+      (field → messages). User-facing `title`, `detail` and messages are in Portuguese (pt-PT).
+    - Pagination: `{ items, page, pageSize, totalCount }`, `page` starts at 1.
+    - `/api/admin/*` requires a session cookie for an admin who is active on the allowlist.
+      `POST/PUT/PATCH/DELETE` requests also require the `X-XSRF-TOKEN` header
+      with the value of the `XSRF-TOKEN` cookie (issued by `GET /api/admin/me`).
+      No session → 401; session outside the allowlist/inactive → 403; no antiforgery → 400.
+    - Private fields (`registrationNumber`, `vin`, `internalNotes`) and documents
+      never appear in `/api/public/*` responses.
 servers:
   - url: http://localhost:5080
-    description: Desenvolvimento local
+    description: Local development
 tags:
   - name: Health
   - name: Public
@@ -33,11 +33,11 @@ paths:
   /health:
     get:
       tags: [Health]
-      summary: Health check (inclui ligação à base de dados)
+      summary: Health check (includes database connectivity)
       security: []
       responses:
         '200':
-          description: Saudável
+          description: Healthy
           content:
             application/json:
               schema:
@@ -45,19 +45,19 @@ paths:
                 properties:
                   status: { type: string, enum: [Healthy, Degraded, Unhealthy] }
         '503':
-          description: Não saudável
+          description: Unhealthy
 
   # ---------------------------------------------------------------- Public
   /api/public/vehicles:
     get:
       tags: [Public]
-      summary: Lista paginada de veículos publicados
-      description: Devolve apenas veículos com estado `Published`. Usado pelo build do site estático.
+      summary: Paginated list of published vehicles
+      description: Returns only vehicles with status `Published`. Used by the static site build.
       security: []
       parameters:
         - name: q
           in: query
-          description: Pesquisa por marca, modelo ou versão (case/acentos insensível).
+          description: Search by make, model or version (case- and accent-insensitive).
           schema: { type: string, maxLength: 100 }
         - name: minPrice
           in: query
@@ -67,7 +67,7 @@ paths:
           schema: { type: number, format: decimal, minimum: 0 }
         - name: year
           in: query
-          description: Ano mínimo.
+          description: Minimum year.
           schema: { type: integer, minimum: 1900 }
         - name: maxKm
           in: query
@@ -80,7 +80,7 @@ paths:
           schema: { $ref: '#/components/schemas/Transmission' }
         - name: sort
           in: query
-          description: Veículos "sob consulta" ficam no fim quando se ordena por preço.
+          description: Vehicles with "price on request" go last when sorting by price.
           schema:
             type: string
             enum: [published_desc, price_asc, price_desc, year_desc, year_asc]
@@ -119,7 +119,7 @@ paths:
   /api/public/vehicles/{id}:
     get:
       tags: [Public]
-      summary: Detalhe público de um veículo publicado
+      summary: Public detail of a published vehicle
       security: []
       parameters:
         - $ref: '#/components/parameters/VehicleId'
@@ -130,7 +130,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PublicVehicleDetail' }
         '404':
-          description: Não existe ou não está `Published` (Draft e Sold dão 404).
+          description: Does not exist or is not `Published` (Draft and Sold return 404).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
@@ -139,52 +139,52 @@ paths:
   /api/auth/login/google:
     get:
       tags: [Auth]
-      summary: Inicia o login com Google (OIDC)
+      summary: Starts the Google (OIDC) login
       security: []
       parameters:
         - name: returnUrl
           in: query
-          description: Caminho relativo dentro de `/admin` (validado; URLs absolutas são ignoradas).
+          description: Relative path inside `/admin` (validated; absolute URLs are ignored).
           schema: { type: string, default: /admin }
       responses:
         '302':
-          description: Redireciona para o Google.
+          description: Redirects to Google.
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /api/auth/callback/google:
     get:
       tags: [Auth]
-      summary: Callback OIDC do Google (gerido pelo middleware de autenticação)
+      summary: Google OIDC callback (handled by the authentication middleware)
       description: |
-        Valida o `id_token`, exige `email_verified = true` e um registo ativo em `admin_users`.
-        Sucesso → cria o cookie de sessão e redireciona para `returnUrl`.
-        Falha → **não** cria sessão e redireciona para `/admin/login?error=not_allowed`
-        (mensagem genérica, sem revelar se o email existe).
+        Validates the `id_token`, requires `email_verified = true` and an active record in `admin_users`.
+        Success → creates the session cookie and redirects to `returnUrl`.
+        Failure → does **not** create a session and redirects to `/admin/login?error=not_allowed`
+        (generic message, without revealing whether the email exists).
       security: []
       responses:
         '302':
-          description: Redireciona para o site (sucesso ou erro).
+          description: Redirects to the site (success or error).
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /api/auth/logout:
     post:
       tags: [Auth]
-      summary: Termina a sessão
+      summary: Ends the session
       security:
         - cookieAuth: []
       parameters:
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
         '204':
-          description: Sessão terminada; cookie removido.
+          description: Session ended; cookie removed.
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ---------------------------------------------------------------- Admin
   /api/admin/me:
     get:
       tags: [Admin]
-      summary: Utilizador da sessão atual
-      description: Também emite/renova o cookie `XSRF-TOKEN` usado nos pedidos que alteram estado.
+      summary: Current session user
+      description: Also issues/renews the `XSRF-TOKEN` cookie used by state-changing requests.
       responses:
         '200':
           description: OK
@@ -197,7 +197,7 @@ paths:
   /api/admin/dashboard:
     get:
       tags: [Admin]
-      summary: Contadores operacionais do inventário
+      summary: Operational inventory counters
       responses:
         '200':
           description: OK
@@ -210,11 +210,11 @@ paths:
   /api/admin/vehicles:
     get:
       tags: [AdminVehicles]
-      summary: Inventário (todos os estados), paginado
+      summary: Inventory (all statuses), paginated
       parameters:
         - name: q
           in: query
-          description: Pesquisa por marca, modelo, matrícula ou VIN.
+          description: Search by make, model, registration number or VIN.
           schema: { type: string, maxLength: 100 }
         - name: status
           in: query
@@ -238,7 +238,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [AdminVehicles]
-      summary: Cria um veículo em `Draft`
+      summary: Creates a vehicle in `Draft`
       parameters:
         - $ref: '#/components/parameters/XsrfHeader'
       requestBody:
@@ -248,7 +248,7 @@ paths:
             schema: { $ref: '#/components/schemas/VehicleInput' }
       responses:
         '201':
-          description: Criado
+          description: Created
           headers:
             Location:
               schema: { type: string }
@@ -265,7 +265,7 @@ paths:
       - $ref: '#/components/parameters/VehicleId'
     get:
       tags: [AdminVehicles]
-      summary: Detalhe interno (inclui campos privados e imagens)
+      summary: Internal detail (includes private fields and images)
       responses:
         '200':
           description: OK
@@ -277,11 +277,11 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [AdminVehicles]
-      summary: Substitui os dados editáveis do veículo
+      summary: Replaces the vehicle's editable data
       description: |
-        O estado não muda por aqui (usar as ações). Se o veículo estiver `Published`,
-        as regras de publicação continuam a ter de se verificar (422 caso contrário)
-        e é disparado o rebuild do site.
+        The status does not change here (use the actions). If the vehicle is `Published`,
+        the publish rules must still hold (422 otherwise)
+        and a site rebuild is triggered.
       parameters:
         - $ref: '#/components/parameters/XsrfHeader'
       requestBody:
@@ -302,12 +302,12 @@ paths:
         '422': { $ref: '#/components/responses/PublishValidationFailed' }
     delete:
       tags: [AdminVehicles]
-      summary: Apaga um veículo (só em `Draft`)
-      description: Apaga também as imagens e documentos associados (BD e storage).
+      summary: Deletes a vehicle (only in `Draft`)
+      description: Also deletes the associated images and documents (DB and storage).
       parameters:
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
-        '204': { description: Apagado }
+        '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -318,14 +318,14 @@ paths:
       tags: [AdminVehicles]
       summary: Draft → Published
       description: |
-        Valida: marca, modelo, ano, km, combustível, caixa, preço válido OU `priceOnRequest`,
-        e ≥1 foto principal. Define `publishedAt`, regista no audit log e dispara o rebuild do site.
+        Validates: make, model, year, mileage, fuel, transmission, a valid price OR `priceOnRequest`,
+        and ≥1 primary photo. Sets `publishedAt`, writes to the audit log and triggers a site rebuild.
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
         '200':
-          description: Publicado
+          description: Published
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
@@ -344,7 +344,7 @@ paths:
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
         '200':
-          description: Retirado
+          description: Unpublished
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
@@ -357,13 +357,13 @@ paths:
     post:
       tags: [AdminVehicles]
       summary: Published → Sold
-      description: Define `soldAt`, regista no audit log e dispara o rebuild do site.
+      description: Sets `soldAt`, writes to the audit log and triggers a site rebuild.
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
         '200':
-          description: Marcado como vendido
+          description: Marked as sold
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
@@ -375,13 +375,13 @@ paths:
   /api/admin/vehicles/{id}/reopen:
     post:
       tags: [AdminVehicles]
-      summary: Sold → Draft (sem confirmação extra; fica no audit log)
+      summary: Sold → Draft (no extra confirmation; recorded in the audit log)
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
         '200':
-          description: Reaberto
+          description: Reopened
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AdminVehicleDetail' }
@@ -394,12 +394,12 @@ paths:
   /api/admin/vehicles/{id}/images:
     post:
       tags: [AdminImages]
-      summary: Carrega uma ou mais fotos
+      summary: Uploads one or more photos
       description: |
-        JPEG, PNG ou WebP, validados por extensão + MIME + magic bytes. Máx. 10 MB por ficheiro,
-        máx. 30 fotos por veículo. As imagens são re-codificadas (EXIF removido) e é gerado
-        um thumbnail WebP. A primeira foto de um veículo sem principal fica como principal.
-        Operação tudo-ou-nada: se um ficheiro falhar a validação, nenhum é guardado.
+        JPEG, PNG or WebP, validated by extension + MIME + magic bytes. Max 10 MB per file,
+        max 30 photos per vehicle. Images are re-encoded (EXIF stripped) and a WebP
+        thumbnail is generated. The first photo of a vehicle without a primary becomes the primary.
+        All-or-nothing: if one file fails validation, none is stored.
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/XsrfHeader'
@@ -418,7 +418,7 @@ paths:
                   items: { type: string, format: binary }
       responses:
         '201':
-          description: Fotos criadas; devolve a lista completa e ordenada.
+          description: Photos created; returns the full, ordered list.
           content:
             application/json:
               schema:
@@ -434,8 +434,8 @@ paths:
   /api/admin/vehicles/{id}/images/order:
     patch:
       tags: [AdminImages]
-      summary: Reordena as fotos
-      description: '`imageIds` tem de conter exatamente todas as fotos do veículo, pela nova ordem.'
+      summary: Reorders the photos
+      description: '`imageIds` must contain exactly all of the vehicle''s photos, in the new order.'
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/XsrfHeader'
@@ -466,7 +466,7 @@ paths:
   /api/admin/vehicles/{id}/images/{imageId}/primary:
     put:
       tags: [AdminImages]
-      summary: Define a foto principal
+      summary: Sets the primary photo
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/ImageId'
@@ -482,7 +482,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404':
-          description: Veículo não existe, ou a imagem não pertence a este veículo.
+          description: Vehicle does not exist, or the image does not belong to this vehicle.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
@@ -490,16 +490,16 @@ paths:
   /api/admin/vehicles/{id}/images/{imageId}:
     delete:
       tags: [AdminImages]
-      summary: Apaga uma foto
+      summary: Deletes a photo
       description: |
-        Se for a principal, a seguinte (por `sortOrder`) passa a principal.
-        Num veículo `Published` não é possível apagar a última foto (409).
+        If it is the primary, the next one (by `sortOrder`) becomes the primary.
+        On a `Published` vehicle the last photo cannot be deleted (409).
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/ImageId'
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
-        '204': { description: Apagada }
+        '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -511,7 +511,7 @@ paths:
       - $ref: '#/components/parameters/VehicleId'
     get:
       tags: [AdminDocuments]
-      summary: Lista os documentos privados do veículo
+      summary: Lists the vehicle's private documents
       responses:
         '200':
           description: OK
@@ -525,8 +525,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [AdminDocuments]
-      summary: Carrega um documento privado
-      description: PDF, JPEG ou PNG (validados por magic bytes). Máx. 15 MB. Guardado no bucket privado.
+      summary: Uploads a private document
+      description: PDF, JPEG or PNG (validated by magic bytes). Max 15 MB. Stored in the private bucket.
       parameters:
         - $ref: '#/components/parameters/XsrfHeader'
       requestBody:
@@ -542,10 +542,10 @@ paths:
                 displayName:
                   type: string
                   maxLength: 200
-                  description: Se omitido, usa o nome do ficheiro sanitizado.
+                  description: If omitted, the sanitised file name is used.
       responses:
         '201':
-          description: Criado
+          description: Created
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VehicleDocument' }
@@ -559,16 +559,16 @@ paths:
   /api/admin/vehicles/{id}/documents/{docId}/download:
     get:
       tags: [AdminDocuments]
-      summary: Descarrega um documento (URL pré-assinada curta)
+      summary: Downloads a document (short-lived pre-signed URL)
       description: |
-        Verifica a sessão e que `docId` pertence a `id` (anti-IDOR) antes de emitir uma
-        URL pré-assinada de curta duração (≈60 s) com `Content-Disposition: attachment`.
+        Checks the session and that `docId` belongs to `id` (anti-IDOR) before issuing a
+        short-lived (≈60 s) pre-signed URL with `Content-Disposition: attachment`.
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/DocumentId'
       responses:
         '302':
-          description: Redireciona para a URL pré-assinada.
+          description: Redirects to the pre-signed URL.
           headers:
             Location:
               schema: { type: string, format: uri }
@@ -577,7 +577,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404':
-          description: Veículo/documento inexistente ou documento de outro veículo.
+          description: Vehicle/document does not exist, or the document belongs to another vehicle.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
@@ -585,13 +585,13 @@ paths:
   /api/admin/vehicles/{id}/documents/{docId}:
     delete:
       tags: [AdminDocuments]
-      summary: Apaga um documento
+      summary: Deletes a document
       parameters:
         - $ref: '#/components/parameters/VehicleId'
         - $ref: '#/components/parameters/DocumentId'
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
-        '204': { description: Apagado }
+        '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -602,7 +602,7 @@ components:
       type: apiKey
       in: cookie
       name: __Host-silvastock-auth
-      description: Cookie HttpOnly, Secure, SameSite=Lax emitido após login Google.
+      description: HttpOnly, Secure, SameSite=Lax cookie issued after Google login.
 
   parameters:
     VehicleId:
@@ -632,32 +632,32 @@ components:
       name: X-XSRF-TOKEN
       in: header
       required: true
-      description: Valor do cookie `XSRF-TOKEN`.
+      description: Value of the `XSRF-TOKEN` cookie.
       schema: { type: string }
 
   responses:
     ValidationError:
-      description: Pedido inválido (formato, limites, campos).
+      description: Invalid request (format, limits, fields).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ValidationProblemDetails' }
     Unauthorized:
-      description: Sem sessão válida.
+      description: No valid session.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
     Forbidden:
-      description: Sessão válida mas o utilizador não está ativo na allowlist.
+      description: Valid session, but the user is not active on the allowlist.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
     NotFound:
-      description: Recurso inexistente.
+      description: Resource not found.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
     InvalidState:
-      description: A operação não é permitida no estado atual do veículo.
+      description: The operation is not allowed in the vehicle's current status.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
@@ -667,7 +667,7 @@ components:
             status: 409
             detail: Não é possível marcar como vendido um veículo em Draft.
     PublishValidationFailed:
-      description: O veículo não cumpre as regras de publicação.
+      description: The vehicle does not meet the publish rules.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/PublishProblemDetails' }
@@ -680,17 +680,17 @@ components:
               price: [Indique um preço ou selecione "sob consulta".]
               primaryImage: [É necessária uma foto principal.]
     PayloadTooLarge:
-      description: Ficheiro ou pedido acima do limite.
+      description: File or request above the limit.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
     UnsupportedMediaType:
-      description: Tipo de ficheiro não aceite (conteúdo real não corresponde a um formato permitido).
+      description: File type not accepted (real content does not match an allowed format).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
     TooManyRequests:
-      description: Limite de pedidos excedido.
+      description: Rate limit exceeded.
       headers:
         Retry-After:
           schema: { type: integer }
@@ -718,7 +718,7 @@ components:
     DocumentCategory:
       type: string
       enum: [RegistrationDocument, Inspection, Maintenance, Warranty, Purchase, Other]
-      description: RegistrationDocument = DUA.
+      description: RegistrationDocument = vehicle registration certificate (DUA).
 
     # ---- errors
     ProblemDetails:
@@ -789,7 +789,7 @@ components:
         price:
           type: [number, 'null']
           format: decimal
-          description: null quando `priceOnRequest` é true.
+          description: null when `priceOnRequest` is true.
         priceOnRequest: { type: boolean }
         fuel: { $ref: '#/components/schemas/FuelType' }
         transmission: { $ref: '#/components/schemas/Transmission' }
@@ -815,14 +815,14 @@ components:
               oneOf:
                 - $ref: '#/components/schemas/Drivetrain'
                 - type: 'null'
-            emissions: { type: [string, 'null'], description: 'Ex.: "Euro 6d" ou "120 g/km".' }
+            emissions: { type: [string, 'null'], description: 'E.g. "Euro 6d" or "120 g/km".' }
             description: { type: [string, 'null'] }
             equipment:
               type: array
               items: { type: string }
             images:
               type: array
-              description: Ordenadas por sortOrder; a principal primeiro.
+              description: Sorted by sortOrder; primary first.
               items: { $ref: '#/components/schemas/PublicImage' }
     PublicVehicleSummaryPage:
       type: object
@@ -839,14 +839,14 @@ components:
     VehicleInput:
       type: object
       description: |
-        Dados editáveis. Para guardar em Draft só `make` e `model` são obrigatórios;
-        os restantes obrigatórios para publicar são validados nas transições.
+        Editable data. To save as Draft only `make` and `model` are required;
+        the other fields required for publishing are validated on the transitions.
       required: [make, model]
       properties:
         make: { type: string, minLength: 1, maxLength: 60 }
         model: { type: string, minLength: 1, maxLength: 60 }
         version: { type: [string, 'null'], maxLength: 120 }
-        year: { type: [integer, 'null'], minimum: 1900, description: 'Máximo: ano corrente + 1.' }
+        year: { type: [integer, 'null'], minimum: 1900, description: 'Max: current year + 1.' }
         mileageKm: { type: [integer, 'null'], minimum: 0, maximum: 2000000 }
         price: { type: [number, 'null'], format: decimal, minimum: 0, maximum: 99999999.99 }
         priceOnRequest: { type: boolean, default: false }
@@ -878,14 +878,14 @@ components:
           type: array
           maxItems: 100
           default: []
-          description: Lista de extras/equipamento (ex. "Ar condicionado automático").
+          description: List of extras/equipment, in Portuguese (e.g. "Ar condicionado automático").
           items: { type: string, minLength: 1, maxLength: 100 }
-        registrationNumber: { type: [string, 'null'], maxLength: 16, description: Privado. }
+        registrationNumber: { type: [string, 'null'], maxLength: 16, description: Private. }
         vin:
           type: [string, 'null']
           pattern: '^[A-HJ-NPR-Z0-9]{17}$'
-          description: Privado. 17 caracteres, sem I/O/Q.
-        internalNotes: { type: [string, 'null'], maxLength: 5000, description: Privado. }
+          description: Private. 17 characters, no I/O/Q.
+        internalNotes: { type: [string, 'null'], maxLength: 5000, description: Private. }
     AdminVehicleSummary:
       type: object
       required: [id, status, make, model, priceOnRequest, imageCount, updatedAt]
@@ -925,14 +925,14 @@ components:
             soldAt: { type: [string, 'null'], format: date-time }
             createdAt: { type: string, format: date-time }
             updatedAt: { type: string, format: date-time }
-            createdBy: { type: string, description: Email do admin. }
-            updatedBy: { type: string, description: Email do admin. }
+            createdBy: { type: string, description: Admin email. }
+            updatedBy: { type: string, description: Admin email. }
             images:
               type: array
               items: { $ref: '#/components/schemas/AdminVehicleImage' }
             publishReadiness:
               type: array
-              description: Campos em falta para publicar (vazio = pode publicar).
+              description: Fields missing for publishing (empty = can be published).
               items: { type: string }
 
     # ---- documents

@@ -1,23 +1,23 @@
-# ADR-0007 — Site público estático + rebuild por `workflow_dispatch`
+# ADR-0007 — Static public site + rebuild via `workflow_dispatch`
 
-**Estado:** Aceite · 2026-11-14
+**Status:** Accepted · 2026-11-14
 
-## Contexto
-A API escala a zero (cold start). O catálogo público não deve ter cold start e deve ser indexável. O inventário muda poucas vezes por dia.
+## Context
+The API scales to zero (cold start). The public catalogue should have no cold start and must be indexable. The inventory changes a few times a day.
 
-## Decisão
-- O Next.js é exportado como **HTML estático** (`output: 'export'`). No build, o site lê `GET /api/public/vehicles` (todas as páginas) e gera:
-  - a página de catálogo com os dados de todos os veículos publicados embutidos (JSON);
-  - uma página por veículo via `generateStaticParams` (`/carros/{id}-{texto}`), com metadata/OG e JSON-LD.
-- **Filtros, pesquisa, ordenação e paginação do catálogo correm no browser** sobre esses dados.
-- Quando um veículo é publicado, retirado, vendido, reaberto ou um veículo **publicado** é editado (incluindo fotos), a API chama a **GitHub API `workflow_dispatch`** do workflow `deploy-site.yml`, que constrói e publica no Cloudflare Pages (1–3 min).
-  - Disparo **assíncrono e com debounce** (ex.: agrupa alterações durante 60 s) para não lançar um build por cada clique; falha no disparo é registada em log e não falha o pedido do admin.
-  - Token GitHub de permissão mínima (fine-grained PAT só com `actions:write` neste repo), guardado como segredo.
-- O backoffice (`/admin`) é uma SPA no mesmo export, que chama `api.<dominio>` em runtime com cookie.
+## Decision
+- Next.js is exported as **static HTML** (`output: 'export'`). At build time the site reads `GET /api/public/vehicles` (all pages) and generates:
+  - the catalogue page with the data of every published vehicle embedded (JSON);
+  - one page per vehicle via `generateStaticParams` (`/carros/{id}-{text}`), with metadata/OG and JSON-LD.
+- **Catalogue filtering, search, sorting and pagination run in the browser** over that data.
+- When a vehicle is published, unpublished, sold or reopened, or a **published** vehicle is edited (including photos), the API calls the **GitHub API `workflow_dispatch`** for the `deploy-site.yml` workflow, which builds and publishes to Cloudflare Pages (1–3 min).
+  - The trigger is **asynchronous and debounced** (e.g. it groups changes for 60 s) so a build is not started on every click; a failed trigger is logged and does not fail the admin's request.
+  - Least-privilege GitHub token (fine-grained PAT with only `actions:write` on this repo), stored as a secret.
+- The back office (`/admin`) is an SPA in the same export, calling `api.<domain>` at runtime with a cookie.
 
-## Consequências
-- + Zero cold start e excelente performance/SEO no público; o site continua a funcionar com a API em baixo.
-- − Alterações demoram 1–3 min a aparecer. Um veículo vendido continua visível durante esse intervalo (aceite; a página de detalhe pode, opcionalmente, confirmar estado no cliente — fora do MVP).
-- − O build depende da API acordada (cold start no CI é aceitável).
-- − Com centenas de veículos o JSON do catálogo cresce; reavaliar (paginação no build ou API no cliente) se ultrapassar ~1 000 veículos. O endpoint público mantém paginação no servidor para isso.
-- Limites do Cloudflare Pages free (builds/mês) e minutos do GitHub Actions: builds acontecem no GitHub Actions e só o upload vai para o Pages.
+## Consequences
+- + Zero cold start and excellent performance/SEO on the public side; the site keeps working when the API is down.
+- − Changes take 1–3 min to appear. A sold vehicle stays visible during that window (accepted; the detail page could optionally confirm the status client-side — outside the MVP).
+- − The build depends on the API being awake (a cold start in CI is acceptable).
+- − With hundreds of vehicles the catalogue JSON grows; reassess (pagination at build time or client-side API calls) beyond ~1,000 vehicles. The public endpoint keeps server-side pagination for that.
+- Cloudflare Pages free limits (builds/month) and GitHub Actions minutes: builds run on GitHub Actions and only the upload goes to Pages.

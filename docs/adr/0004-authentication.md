@@ -1,24 +1,24 @@
-# ADR-0004 — Autenticação: Google OIDC + sessão por cookie + allowlist
+# ADR-0004 — Authentication: Google OIDC + cookie session + allowlist
 
-**Estado:** Aceite · 2026-11-14 (confirmado pelo dono)
+**Status:** Accepted · 2026-11-14 (confirmed by the owner)
 
-## Contexto
-Só 2–3 administradores, sem registo público. A alternativa (ASP.NET Identity com email + palavra-passe) obriga a gerir passwords, lockout e recuperação de conta (SMTP ou procedimento manual).
+## Context
+Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity with email + password) means managing passwords, lockout and account recovery (SMTP or a manual procedure).
 
-## Decisão
-- **Login com Google (OpenID Connect)** no backend ASP.NET Core (`/api/auth/login/google` → Google → callback).
-- **Allowlist:** tabela `admin_users`. Depois do callback, se `email_verified` não for `true` ou o email não existir em `admin_users` com `is_active = true` → **recusar sem criar sessão** e redirecionar para `/admin/login?error=not_allowed`.
-- **Sessão:** cookie de autenticação ASP.NET, `HttpOnly`, `Secure`, `SameSite=Lax`, expiração deslizante (proposta: 8 h, máximo 7 dias — a confirmar). Sem JWT, sem tokens no browser.
-- **CSRF:** antiforgery do ASP.NET. O frontend obtém o token (cookie legível `XSRF-TOKEN`) e envia-o no cabeçalho `X-XSRF-TOKEN` em `POST/PUT/PATCH/DELETE`.
-- **Autorização:** policy `Admin` em todos os `/api/admin/*`; a cada pedido confirma que o utilizador continua ativo na allowlist (remover da tabela revoga o acesso).
-- **Gestão:** comando CLI `SilvaStock.Cli add-admin <email> [--name]` / `remove-admin <email>` executado com a connection string de produção. Ecrã de gestão fica fora do MVP.
-- **Rate limiting** (ASP.NET `RateLimiter`) nos endpoints `/api/auth/*`.
-- **CORS:** só a origem do site, com credenciais.
+## Decision
+- **Google login (OpenID Connect)** in the ASP.NET Core backend (`/api/auth/login/google` → Google → callback).
+- **Allowlist:** `admin_users` table. After the callback, if `email_verified` is not `true` or the email is not in `admin_users` with `is_active = true` → **reject without creating a session** and redirect to `/admin/login?error=not_allowed`.
+- **Session:** ASP.NET authentication cookie, `HttpOnly`, `Secure`, `SameSite=Lax`, sliding expiration (proposal: 8 h, max 7 days — to confirm in F2-01). No JWT, no tokens in the browser.
+- **CSRF:** ASP.NET antiforgery. The frontend reads the token (readable `XSRF-TOKEN` cookie) and sends it in the `X-XSRF-TOKEN` header on `POST/PUT/PATCH/DELETE`.
+- **Authorisation:** `Admin` policy on every `/api/admin/*`; on every request it checks that the user is still active on the allowlist (removing them from the table revokes access).
+- **Management:** CLI command `SilvaStock.Cli add-admin <email> [--name]` / `remove-admin <email>`, run with the production connection string. A management screen is outside the MVP.
+- **Rate limiting** (ASP.NET `RateLimiter`) on the `/api/auth/*` endpoints.
+- **CORS:** only the site origin, with credentials.
 
-## Consequências
-- + Zero passwords guardadas; MFA e recuperação de conta ficam a cargo da Google.
-- + Recuperação se todos ficarem sem acesso: correr `add-admin` com outra conta Google.
-- − Cada admin precisa de conta Google; dependência de um fornecedor externo.
-- − Requer projeto Google Cloud com OAuth consent screen (grátis); redirect URIs de localhost e do domínio de produção.
-- − API em domínio diferente do site → requer o mesmo domínio registável (ADR-0002).
-- Respostas: `401` sem sessão; `403` com sessão mas fora da allowlist/inativo. Testes provam ambos para cada endpoint admin.
+## Consequences
+- + Zero stored passwords; MFA and account recovery are handled by Google.
+- + Recovery if everyone is locked out: run `add-admin` with another Google account.
+- − Every admin needs a Google account; dependency on an external provider.
+- − Requires a Google Cloud project with an OAuth consent screen (free); redirect URIs for localhost and the production domain.
+- − API on a different host from the site → requires the same registrable domain (ADR-0002).
+- Responses: `401` without a session; `403` with a session but outside the allowlist/inactive. Tests prove both for every admin endpoint.

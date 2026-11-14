@@ -1,19 +1,19 @@
 # ADR-0002 — Hosting: Azure Container Apps (API) + Cloudflare Pages (site)
 
-**Estado:** Aceite · 2026-11-14 · **Quotas free a reverificar antes da Fase 7**
+**Status:** Accepted · 2026-11-14 · **Free-tier quotas to re-check (issue F1-08)**
 
-## Contexto
-Custo de produção próximo de zero (só o domínio é aceite). O catálogo público não deve ter cold start; no backoffice é aceitável. Tráfego baixo e intermitente.
+## Context
+Production cost close to zero (only the domain is accepted). The public catalogue should have no cold start; the back office may. Low, intermittent traffic.
 
-## Decisão
-- **API:** contentor Docker em **Azure Container Apps** (plano Consumption), `minReplicas: 0`, `maxReplicas: 1`, com **alerta de orçamento** na subscrição.
-- **Site (público + /admin):** ficheiros estáticos em **Cloudflare Pages**.
-- **Domínio:** adiado. `www.<dominio>` (ou apex) → Pages; `api.<dominio>` → Container Apps. Tudo em localhost até lá.
+## Decision
+- **API:** Docker container on **Azure Container Apps** (Consumption plan), `minReplicas: 0`, `maxReplicas: 1`, with a **budget alert** on the subscription.
+- **Site (public + /admin):** static files on **Cloudflare Pages**.
+- **Domain:** deferred. `www.<domain>` (or apex) → Pages; `api.<domain>` → Container Apps. Everything on localhost until then.
 
-## Consequências
-- + Catálogo público servido por CDN, sem cold start, independente da API (ver ADR-0007).
-- + Escala a zero → custo ~0 com o free grant mensal do Container Apps.
-- − Primeiro pedido ao backoffice após inatividade sofre cold start da API (segundos) — aceite.
-- − `maxReplicas: 1` → rate limiting e outras estruturas em memória funcionam, mas sem alta disponibilidade (aceite para o MVP).
-- − A sessão por cookie exige que site e API partilhem o mesmo *site* (mesmo domínio registável) → **a primeira publicação precisa de domínio próprio**. Não usar `*.pages.dev` + `*.azurecontainerapps.io` em produção.
-- Imagem de contentor: GitHub Container Registry (grátis para repo público), evitando o custo do Azure Container Registry.
+## Consequences
+- + Public catalogue served from a CDN, with no cold start and independent of the API (see ADR-0007).
+- + Scale to zero → ~zero cost within the monthly Container Apps free grant.
+- − The first back-office request after inactivity hits an API cold start (seconds) — accepted.
+- − `maxReplicas: 1` → rate limiting and other in-memory structures work, but there is no high availability (accepted for the MVP).
+- − The cookie session requires the site and the API to share the same *site* (same registrable domain) → **the first deployment needs our own domain**. Do not use `*.pages.dev` + `*.azurecontainerapps.io` in production.
+- Container image: GitHub Container Registry (free for a public repo), avoiding the Azure Container Registry cost.

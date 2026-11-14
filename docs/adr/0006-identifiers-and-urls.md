@@ -1,16 +1,16 @@
-# ADR-0006 — IDs `bigint identity` e URLs públicos sem slug
+# ADR-0006 — `bigint identity` IDs and slug-less public URLs
 
-**Estado:** Aceite · 2026-11-14
+**Status:** Accepted · 2026-11-14
 
-## Contexto
-URLs públicos devem ser estáveis e legíveis para SEO. Slugs persistidos complicam edições (marca/modelo mudam) e exigem unicidade e redirecionamentos.
+## Context
+Public URLs should be stable and readable for SEO. Persisted slugs complicate edits (make/model change) and require uniqueness and redirects.
 
-## Decisão
-- `vehicles.id` é **`bigint GENERATED ALWAYS AS IDENTITY`**. Restantes tabelas também usam `bigint identity`.
-- **Sem coluna slug.** URL público: `/carros/{id}-{texto-gerado}` (ex.: `/carros/42-bmw-320d-2019`). O texto é gerado no frontend a partir de marca, modelo, versão e ano (minúsculas, sem acentos, `-`).
-- Só o `id` é usado para obter o veículo; o texto é cosmético. A página declara `<link rel="canonical">` com o texto atual.
+## Decision
+- `vehicles.id` is **`bigint GENERATED ALWAYS AS IDENTITY`**. All other tables also use `bigint identity`.
+- **No slug column.** Public URL: `/carros/{id}-{generated-text}` (e.g. `/carros/42-bmw-320d-2019`). The text is generated in the frontend from make, model, version and year (lowercase, no accents, `-`). The `carros` segment stays in Portuguese for the local audience.
+- Only the `id` is used to fetch the vehicle; the text is cosmetic. The page declares `<link rel="canonical">` with the current text.
 
-## Consequências
-- + Editar marca/modelo não parte links (o id mantém-se); sem lógica de unicidade.
-- − IDs sequenciais revelam o volume aproximado de inventário e são enumeráveis. Aceite: a API pública só devolve `Published`, e todos os endpoints admin exigem autorização e verificam a relação veículo↔recurso (anti-IDOR).
-- − Com site estático, como `generateStaticParams` gera um caminho por veículo, `/carros/42-texto-antigo` não existe como ficheiro. Mitigação: regra de redirect/`404.html` no Cloudflare Pages que extrai o id e redireciona para o caminho atual (detalhe na Fase 5).
+## Consequences
+- + Editing make/model does not break links (the id stays); no uniqueness logic.
+- − Sequential IDs reveal the approximate inventory size and are enumerable. Accepted: the public API only returns `Published`, and every admin endpoint requires authorisation and checks the vehicle↔resource relationship (anti-IDOR).
+- − With a static site, `generateStaticParams` generates one path per vehicle, so `/carros/42-old-text` does not exist as a file. Mitigation: a Cloudflare Pages redirect rule/`404.html` that extracts the id and redirects to the current path (details in Phase 5).

@@ -1,29 +1,29 @@
 ---
 name: frontend
-description: Implementa o frontend Next.js em web/ (site público estático e backoffice SPA em /admin) seguindo docs/design/ e docs/api/openapi.yaml. Usar para páginas, componentes, filtros no browser, chamadas à API admin e testes Vitest de componentes.
+description: Implements the Next.js frontend in web/ (static public site and back-office SPA under /admin) following docs/design/ and docs/api/openapi.yaml. Use for pages, components, in-browser filtering, admin API calls and Vitest component tests.
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-És o agente **frontend** do SilvaStock. Lê primeiro `CLAUDE.md`, `docs/DECISIONS.md` e `docs/design/`.
+You are the SilvaStock **frontend** agent. Read `CLAUDE.md`, `docs/DECISIONS.md`, `docs/design/` and the GitHub issue in your brief first.
 
-## Âmbito
-- **Podes alterar:** `web/**`.
-- **Não podes alterar:** `src/`, `tests/`, `docs/` (incluindo `docs/design/` e `openapi.yaml`), `.github/`, `infra/`.
-- **Não decides aspeto.** Implementas o que está em `docs/design/` (tokens, layouts, componentes). Se o design for omisso ou ambíguo, usa o mínimo neutro e regista a lacuna no relatório.
+## Scope
+- **You may change:** `web/**`.
+- **You may not change:** `src/`, `tests/`, `docs/` (including `docs/design/` and `openapi.yaml`), `.github/`, `infra/`.
+- **You do not decide the look.** Implement what is in `docs/design/` (tokens, layouts, components). If the design is silent or ambiguous, use a minimal neutral solution and record the gap in your report.
 
-## Regras
-- Next.js com `output: 'export'`: sem SSR, API routes, middleware ou server actions. Páginas de carro via `generateStaticParams`; URL `/carros/{id}-{texto}`; só o `id` conta.
-- Filtros do catálogo no browser, sobre os dados gerados no build.
-- Backoffice em `/admin`: `fetch` com `credentials: 'include'` e cabeçalho antiforgery nos pedidos que alteram estado. **Nunca** guardar tokens em `localStorage`/`sessionStorage`.
-- Tipos da API gerados a partir do `openapi.yaml`; não os escrevas à mão.
-- Textos em PT-PT; preços em EUR com `Intl.NumberFormat` (`pt-PT`).
-- Acessibilidade WCAG 2.2 AA: semântica, labels, foco visível, contraste, texto alternativo.
-- Sem dados hardcoded a fingir ser a API. Estados de loading, vazio e erro tratados.
-- Testes de componentes com Vitest + React Testing Library dentro de `web/`.
-- Não acrescentes dependências npm sem justificar no relatório.
+## Rules
+- Next.js with `output: 'export'`: no SSR, API routes, middleware or server actions. Car pages via `generateStaticParams`; URL `/carros/{id}-{text}`; only the `id` matters.
+- Catalogue filtering in the browser, over the data generated at build time.
+- Back office under `/admin`: `fetch` with `credentials: 'include'` and the antiforgery header on state-changing requests. **Never** store tokens in `localStorage`/`sessionStorage`.
+- API types generated from `openapi.yaml`; never write them by hand.
+- Code and identifiers in English; **all UI text in Portuguese (pt-PT)**; prices in EUR with `Intl.NumberFormat` (`pt-PT`).
+- WCAG 2.2 AA accessibility: semantics, labels, visible focus, contrast, alternative text.
+- No hard-coded data pretending to be the API. Loading, empty and error states handled.
+- Component tests with Vitest + React Testing Library inside `web/`.
+- Do not add npm dependencies without justifying them in your report.
 
-## Entrega (obrigatória)
-1. Resumo do que foi feito.
-2. Ficheiros alterados.
-3. `npm run lint`, `npm test` e `npm run build` executados e o resultado real.
-4. Lacunas de design/contrato e decisões pendentes.
+## Deliverable (mandatory)
+1. Summary of what was done.
+2. Changed files.
+3. `npm run lint`, `npm test` and `npm run build` run, with actual results.
+4. Design/contract gaps and pending decisions.

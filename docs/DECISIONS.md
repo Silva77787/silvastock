@@ -1,110 +1,114 @@
-# SilvaStock — Decisões aprovadas (handoff para o Claude Code)
+# SilvaStock — Approved decisions (Claude Code handoff)
 
-> Este ficheiro prevalece sobre todos os outros documentos (`REQUIREMENTS.md`, ADRs, OpenAPI) onde houver conflito.
-> A especificação original (Notion) foi resumida em `REQUIREMENTS.md`.
-> Data: 2026-11-14. Nome do produto: **SilvaStock**.
+> This file takes precedence over every other document (`REQUIREMENTS.md`, ADRs, OpenAPI) in case of conflict.
+> The original specification (Notion) is summarised in `REQUIREMENTS.md`.
+> Date: 2026-11-14. Product name: **SilvaStock**.
 
-## 1. Produto
-Showroom público + backoffice para UM stand de usados, usado pelo dono e familiares (2–3 pessoas).
-Objetivos: portefólio profissional e eventual uso real. Idioma: PT-PT. Moeda: EUR.
-Monólito modular. Sem microserviços. Sem funcionalidades fora do MVP sem justificação.
+## 1. Product
+Public showroom + back office for ONE used-car dealership, used by the owner and family members (2–3 people).
+Goals: professional portfolio and possible real-world use. Currency: EUR.
+Language: documentation, code and GitHub in **English**; the UI shown to visitors and admins in **Portuguese (pt-PT)**.
+Modular monolith. No microservices. No features outside the MVP without justification.
 
-## 2. Restrições
-- Custo de produção próximo de zero (único custo aceite: domínio, comprado mais tarde).
-- Cold start aceitável no backoffice. No catálogo público, preferencialmente nenhum.
-- Domínio: **adiado**. Desenvolver tudo em localhost; a primeira publicação precisa de domínio
-  (cookie de sessão tem de ficar no mesmo site que a API).
-- Repositório GitHub **público** (GitHub Actions grátis).
+## 2. Constraints
+- Production cost close to zero (the only accepted cost is the domain, bought later).
+- Cold start is acceptable in the back office. Preferably none in the public catalogue.
+- Domain: **deferred**. Everything is developed on localhost; the first deployment needs a domain
+  (the session cookie must be on the same site as the API).
+- **Public** GitHub repository (free GitHub Actions).
 
-## 3. Stack (confirmada)
-| Camada | Escolha |
+## 3. Stack (confirmed)
+| Layer | Choice |
 |---|---|
 | Backend | C# / ASP.NET Core **.NET 10** (LTS), EF Core, Npgsql |
-| Frontend | **Next.js** (React + TypeScript) com `output: 'export'` (estático), `generateStaticParams` para as páginas de carro |
-| Base de dados | **PostgreSQL no Neon** (free). Não usar Supabase (pausa após 7 dias sem uso) |
-| API hosting | **Azure Container Apps**, minReplicas 0, maxReplicas 1, alerta de orçamento |
+| Frontend | **Next.js** (React + TypeScript) with `output: 'export'` (static), `generateStaticParams` for car pages |
+| Database | **PostgreSQL on Neon** (free). Do not use Supabase (pauses after 7 days of inactivity) |
+| API hosting | **Azure Container Apps**, minReplicas 0, maxReplicas 1, budget alert |
 | Site hosting | **Cloudflare Pages** |
-| Ficheiros | **Cloudflare R2**: bucket público (fotos) + bucket privado (documentos), via SDK S3 |
+| Files | **Cloudflare R2**: public bucket (photos) + private bucket (documents), via the S3 SDK |
 | CI/CD | GitHub Actions |
-| Testes | xUnit + integração (Testcontainers/Postgres), Vitest, Playwright |
+| Tests | xUnit + integration (Testcontainers/Postgres), Vitest, Playwright |
 
-## 4. Arquitetura
-- Site estático: catálogo e páginas de carro geradas no build a partir da API; filtros no browser.
-- Ao publicar/vender/editar carro publicado, a API dispara `workflow_dispatch` no GitHub Actions para reconstruir o site (1–3 min).
-- Backoffice: SPA em `/admin` no mesmo projeto Next.js, a chamar `api.<dominio>` com cookie.
-- API: monólito modular em camadas (Domain, Application, Infrastructure, Api).
+## 4. Architecture
+- Static site: catalogue and car pages generated at build time from the API; filtering in the browser.
+- When a car is published/sold/edited while published, the API triggers a GitHub Actions `workflow_dispatch` to rebuild the site (1–3 min).
+- Back office: SPA under `/admin` in the same Next.js project, calling `api.<domain>` with a cookie.
+- API: layered modular monolith (Domain, Application, Infrastructure, Api).
 
-## 5. Autenticação
-- Login **com Google (OIDC)** + sessão por cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) + antiforgery. Sem JWT em localStorage.
-- **Allowlist**: tabela `admin_users` (email). Se o email verificado pelo Google não estiver na tabela → recusar, sem criar sessão.
-- Gestão de utilizadores por comando CLI (`add-admin`, `remove-admin`). Ecrã de gestão fica para depois.
-- Verificar `email_verified`. Rate limiting no login.
-- Todos os `/api/admin/*` exigem autorização; testes provam 401/403 sem sessão.
-- **Confirmado pelo dono (2026-11-14):** login com Google (OIDC). Sem email + palavra-passe (sem ASP.NET Identity).
+## 5. Authentication
+- **Google (OIDC)** login + cookie session (`HttpOnly`, `Secure`, `SameSite=Lax`) + antiforgery. No JWT in localStorage.
+- **Allowlist**: `admin_users` table (email). If the Google-verified email is not in the table → reject without creating a session.
+- User management via CLI commands (`add-admin`, `remove-admin`). A management screen comes later.
+- Check `email_verified`. Rate limiting on login.
+- Every `/api/admin/*` endpoint requires authorisation; tests prove 401/403 without a valid session.
+- **Confirmed by the owner (2026-11-14):** Google (OIDC) login. No email + password (no ASP.NET Identity).
 
-## 6. Modelo de dados (PostgreSQL)
-- `admin_users`: id, email (único), display_name, is_active, created_at.
+## 6. Data model (PostgreSQL)
+- `admin_users`: id, email (unique), display_name, is_active, created_at.
 - `vehicles`: **id bigint identity (PK)**, status (Draft|Published|Sold, CHECK), published_at, sold_at,
   make, model, version, year, mileage_km, price (decimal 10,2), price_on_request, fuel, transmission,
   engine_cc, power_kw, body_type, color (exterior), interior_color, doors, seats, drivetrain, emissions, description,
-  equipment (`text[]`, lista de extras, opcional — acrescentado na Fase 0),
-  **privados:** registration_number, vin, internal_notes; created_at, updated_at, created_by, updated_by.
+  equipment (`text[]`, list of extras, optional — added in Phase 0),
+  **private:** registration_number, vin, internal_notes; created_at, updated_at, created_by, updated_by.
 - `vehicle_images`: id, vehicle_id, object_key, thumb_key, content_type, size_bytes, sort_order,
-  is_primary (índice único parcial: 1 principal por veículo).
+  is_primary (partial unique index: 1 primary per vehicle).
 - `vehicle_documents`: id, vehicle_id, category, display_name, object_key, content_type, size_bytes, uploaded_at, uploaded_by.
 - `audit_log`: at, actor, entity, entity_id, action, from_status, to_status.
-- Índices: (status, published_at), (make, model), year, price.
-- **Sem slug.** URL público: `/carros/{id}-{texto-gerado}` (ex.: `/carros/42-bmw-320d-2019`). Só o `id` é usado na pesquisa; o texto é cosmético.
-- **Fora do MVP:** Leads, DealershipProfile (nome/logo ficam no frontend).
-- **Contactos no site (confirmado 2026-11-14):** nenhum canal (sem telefone, WhatsApp, email ou formulário). Só uma mensagem fixa no frontend: "Contacto pelo Messenger".
+- Indexes: (status, published_at), (make, model), year, price.
+- **No slug.** Public URL: `/carros/{id}-{generated-text}` (e.g. `/carros/42-bmw-320d-2019`; `carros` stays in Portuguese for the local audience and SEO). Only the `id` is used for lookup; the text is cosmetic.
+- **Outside the MVP:** Leads, DealershipProfile (name/logo live in the frontend).
+- **Contact on the site (confirmed 2026-11-14):** no channel at all (no phone, WhatsApp, email or form). Only a fixed message in the frontend: "Contacto pelo Messenger".
 
-## 7. Regras de estado
-Transições: Draft→Published (validado), Published→Draft, Published→Sold, Sold→Draft (**sem confirmação extra**).
-Apagar só em Draft.
-Para guardar em Draft: só **marca e modelo** obrigatórios (confirmado 2026-11-14).
-Transição inválida (ex.: vender um Draft) → 409; publicação com campos em falta → 422.
-Para publicar: marca, modelo, ano, km, combustível, caixa, preço válido OU "sob consulta", ≥1 foto principal válida.
-Descrição **opcional**.
+## 7. State rules
+Transitions: Draft→Published (validated), Published→Draft, Published→Sold, Sold→Draft (**no extra confirmation**).
+Delete only in Draft.
+To save as Draft: only **make and model** are required (confirmed 2026-11-14).
+Invalid transition (e.g. selling a Draft) → 409; publishing with missing fields → 422.
+To publish: make, model, year, mileage, fuel, transmission, a valid price OR "price on request", ≥1 valid primary photo.
+Description is **optional**.
 
-## 8. Ficheiros
-- Fotos: validar extensão + MIME + magic bytes; re-codificar (ImageSharp) para remover EXIF; thumbnails WebP; chave aleatória; bucket público. Máx. 10 MB, 30 por veículo.
-- Documentos: bucket privado; download por URL pré-assinada curta, só após verificar sessão e `vehicleId` (anti-IDOR). Máx. 15 MB.
-- Nunca públicos: matrícula, VIN, notas internas, documentos. DTOs públicos e admin separados.
+## 8. Files
+- Photos: validate extension + MIME + magic bytes; re-encode (ImageSharp) to strip EXIF; WebP thumbnails; random key; public bucket. Max 10 MB, 30 per vehicle.
+- Documents: private bucket; download via a short-lived pre-signed URL, only after checking the session and the `vehicleId` (anti-IDOR). Max 15 MB.
+- Never public: registration number, VIN, internal notes, documents. Separate public and admin DTOs.
 
-## 9. API (fonte de verdade: `docs/api/openapi.yaml`)
-Erros em ProblemDetails (RFC 9457). Paginação `{items,page,pageSize,totalCount}`.
-- Público: `GET /api/public/vehicles` (q, minPrice, maxPrice, year, maxKm, fuel, transmission, sort, page, pageSize); `GET /api/public/vehicles/{id}` (404 se não Published).
-- Sessão: `GET /api/auth/login/google`, callback, `POST /api/auth/logout`, `GET /api/admin/me`, `GET /api/admin/dashboard`.
-- Admin: CRUD `/api/admin/vehicles`; `POST …/{id}/publish|unpublish|sold|reopen` (422 com campos em falta).
-- Imagens: upload, `PATCH …/images/order`, `PUT …/images/{id}/primary`, `DELETE`.
-- Documentos: `POST`, `GET` lista, `GET …/{docId}/download`, `DELETE`.
+## 9. API (source of truth: `docs/api/openapi.yaml`)
+Errors as ProblemDetails (RFC 9457). Pagination `{items,page,pageSize,totalCount}`.
+- Public: `GET /api/public/vehicles` (q, minPrice, maxPrice, year, maxKm, fuel, transmission, sort, page, pageSize); `GET /api/public/vehicles/{id}` (404 if not Published).
+- Session: `GET /api/auth/login/google`, callback, `POST /api/auth/logout`, `GET /api/admin/me`, `GET /api/admin/dashboard`.
+- Admin: CRUD `/api/admin/vehicles`; `POST …/{id}/publish|unpublish|sold|reopen` (422 with missing fields).
+- Images: upload, `PATCH …/images/order`, `PUT …/images/{id}/primary`, `DELETE`.
+- Documents: `POST`, `GET` list, `GET …/{docId}/download`, `DELETE`.
 
-## 10. Subagentes (começar com 4) em `.claude/agents/`
-| Agente | Pode alterar | Não pode |
+## 10. Subagents (start with 4) in `.claude/agents/`
+| Agent | May change | May not |
 |---|---|---|
-| `backend` | `src/` (Api, Domain, Application, Infrastructure) | migrações sem aprovação da sessão principal |
-| `frontend` | `web/` (implementa o que está em `docs/design/`) | decidir aspeto |
-| `qa-security` | `tests/` | código de produto (só reporta) |
-| `reviewer` | nada (só leitura, contexto novo) | tudo |
-Sessão principal: dona do OpenAPI, migrações, integração, revisão final, **CI/CD e infra** (`.github/`, Dockerfile, `infra/`).
-Dois agentes nunca editam os mesmos ficheiros. Cada um devolve: resumo, ficheiros alterados, testes, decisões pendentes.
-**Design** é uma sessão própria (não subagente) que produz `docs/design/` (tokens, layouts por página, componentes).
+| `backend` | `src/` (Api, Domain, Application, Infrastructure) | migrations without main-session approval |
+| `frontend` | `web/` (implements what is in `docs/design/`) | decide the look |
+| `qa-security` | `tests/` | product code (reports only) |
+| `reviewer` | nothing (read-only, fresh context) | anything |
 
-## 11. Backlog faseado
-0. Docs: REQUIREMENTS, ADRs, OpenAPI, CLAUDE.md, agentes — aprovação do dono.
-1. Fundação: solução .NET + Next.js, CI, config/segredos, logs estruturados, `/health`. CI verde, sem segredos no repo.
-2. BD + domínio + login Google + allowlist + CLI. Endpoints admin dão 401 sem sessão.
-3. CRUD de veículos + transições. Testes cobrem todas as transições e validação de publicação.
-4. Fotos. Ficheiros falsos rejeitados; EXIF removido.
-5. Showroom público (lista, filtros, detalhe, SEO, WCAG 2.2 AA). Só Published, sem campos privados.
-6. Documentos privados. Sem sessão não há download; IDOR testado.
-7. Dashboard, E2E, revisão de segurança, deploy, backups e **restore testado**.
-Definition of Done: testes unitários + integração a passar, autorização verificada, sem segredos no repo.
+Main session: owns the OpenAPI, migrations, integration, final review, **CI/CD and infra** (`.github/`, Dockerfile, `infra/`).
+Two agents never edit the same files. Each returns: summary, changed files, tests, pending decisions.
+**Design** is a separate session (not a subagent) that produces `docs/design/` (tokens, per-page layouts, components).
 
-## 12. Ainda por decidir
-- Domínio (.com Cloudflare ~11 $/ano vs .pt) — decidir na Fase 7, antes da primeira publicação.
-- ~~Login: Google vs Identity~~ → resolvido: Google (ver §5 e ADR-0004).
-- Preços/quotas free (Azure Container Apps, Neon, R2): **reverificar antes de implementar**.
+## 11. Phased backlog (tracked as GitHub milestones and issues)
+0. Docs: REQUIREMENTS, ADRs, OpenAPI, CLAUDE.md, agents — owner approval.
+1. Foundation: .NET solution + Next.js, CI, config/secrets, structured logs, `/health`. Green CI, no secrets in the repo.
+2. DB + domain + Google login + allowlist + CLI. Admin endpoints return 401 without a session.
+3. Vehicle CRUD + transitions. Tests cover every transition and the publish validation.
+4. Photos. Fake files rejected; EXIF stripped.
+5. Public showroom (list, filters, detail, SEO, WCAG 2.2 AA). Published only, no private fields.
+6. Private documents. No download without a session; IDOR tested.
+7. Dashboard, E2E, security review, deploy, backups and a **tested restore**.
 
-## 13. Contas
-Neon: criada. Azure: criada. Cloudflare: confirmar. Google Cloud: só na fase de login.
+Each phase starts by closing that phase's API contract with the owner (`openapi.yaml` is a draft until then).
+Definition of Done: unit + integration tests passing, authorisation verified, no secrets in the repo.
+
+## 12. Still open
+- Domain (.com on Cloudflare ~$11/year vs .pt) — decide in Phase 7, before the first deployment.
+- ~~Login: Google vs Identity~~ → resolved: Google (see §5 and ADR-0004).
+- Free-tier prices/quotas (Azure Container Apps, Neon, R2): **re-check before implementing** (issue F1-08).
+
+## 13. Accounts
+Neon: created. Azure: created. Cloudflare: to confirm. Google Cloud: only in the login phase.

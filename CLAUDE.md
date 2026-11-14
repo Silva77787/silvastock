@@ -1,105 +1,110 @@
 # CLAUDE.md — SilvaStock
 
-Showroom público + backoffice para **um** stand de usados (2–3 administradores). PT-PT, EUR.
+Public showroom + back office for **one** used-car dealership (2–3 administrators). EUR.
 
-## Fontes de verdade (por ordem de precedência)
-1. `docs/DECISIONS.md` — decisões aprovadas. Prevalece sobre tudo o resto.
-2. `docs/adr/` — uma decisão por ficheiro. Uma decisão nova ou alterada → ADR novo (ou `Superseded by`).
-3. `docs/api/openapi.yaml` — contrato da API. Backend e frontend implementam **contra este ficheiro**.
-4. `docs/REQUIREMENTS.md` — critérios de aceitação, requisitos não funcionais, testes e riscos.
-5. `docs/design/` — aspeto visual (produzido pela sessão de Design). O frontend não decide aspeto.
+## Language
+- **English:** code, identifiers, routes, statuses, commits, docs, ADRs, OpenAPI, GitHub issues/PRs.
+- **Portuguese (pt-PT):** all UI text seen by visitors and admins, and public URL segments (e.g. `/carros/`).
 
-Se encontrares uma contradição entre estas fontes, **pára e pergunta**. Não resolvas por conta própria.
+## Sources of truth (in order of precedence)
+1. `docs/DECISIONS.md` — approved decisions. Overrides everything else.
+2. `docs/adr/` — one decision per file. A new or changed decision → new ADR (or `Superseded by`).
+3. `docs/api/openapi.yaml` — API contract. Backend and frontend implement **against this file**. Each phase closes its part of the contract with the owner before implementation.
+4. `docs/REQUIREMENTS.md` — acceptance criteria, non-functional requirements, tests and risks.
+5. `docs/design/` — visual design (produced by the Design session). The frontend does not decide the look.
+6. GitHub issues (`[F<phase>-<n>]`) — task specs and status.
+
+If you find a contradiction between these sources, **stop and ask**. Do not resolve it on your own.
 
 ## Stack
-| Camada | Tecnologia |
+| Layer | Technology |
 |---|---|
-| Backend | C# / ASP.NET Core .NET 10, EF Core, Npgsql. Monólito modular em camadas |
-| Frontend | Next.js + React + TypeScript, `output: 'export'` (estático); backoffice SPA em `/admin` |
-| BD | PostgreSQL (Neon em produção; Testcontainers nos testes; Docker local) |
-| Ficheiros | Cloudflare R2 via SDK S3: bucket público (fotos) e privado (documentos) |
+| Backend | C# / ASP.NET Core .NET 10, EF Core, Npgsql. Layered modular monolith |
+| Frontend | Next.js + React + TypeScript, `output: 'export'` (static); back-office SPA under `/admin` |
+| DB | PostgreSQL (Neon in production; Testcontainers in tests; Docker locally) |
+| Files | Cloudflare R2 via the S3 SDK: public bucket (photos) and private bucket (documents) |
 | Hosting | API: Azure Container Apps (min 0 / max 1). Site: Cloudflare Pages |
 | CI/CD | GitHub Actions |
-| Testes | xUnit (+ FluentAssertions), Testcontainers, Vitest, Playwright |
+| Tests | xUnit, Testcontainers, Vitest, Playwright |
 
-## Estrutura do repositório (alvo)
+## Repository layout (target)
 ```
 src/
-  SilvaStock.Domain/          entidades, enums, regras de estado (sem dependências externas)
-  SilvaStock.Application/     casos de uso, DTOs, validação, interfaces (portas)
-  SilvaStock.Infrastructure/  EF Core, migrações, R2, Google OIDC, GitHub dispatch
-  SilvaStock.Api/             endpoints, auth, ProblemDetails, composição
+  SilvaStock.Domain/          entities, enums, state rules (no external dependencies)
+  SilvaStock.Application/     use cases, DTOs, validation, interfaces (ports)
+  SilvaStock.Infrastructure/  EF Core, migrations, R2, Google OIDC, GitHub dispatch
+  SilvaStock.Api/             endpoints, auth, ProblemDetails, composition
   SilvaStock.Cli/             add-admin / remove-admin
 tests/
   SilvaStock.UnitTests/
   SilvaStock.IntegrationTests/  (Testcontainers/Postgres, WebApplicationFactory)
-web/                          Next.js (site público + /admin), Vitest
-tests/e2e/                    Playwright
+  e2e/                          Playwright
+web/                          Next.js (public site + /admin), Vitest
 docs/                         DECISIONS, REQUIREMENTS, adr/, api/, design/
-infra/                        IaC / scripts de deploy
+infra/                        IaC / deploy scripts
 .github/workflows/
 ```
-Dependências entre camadas: `Api → Application → Domain`; `Infrastructure → Application, Domain`. O Domain não referencia nada.
+Layer dependencies: `Api → Application → Domain`; `Infrastructure → Application, Domain`. Domain references nothing.
 
-## Convenções
-- **Código, identificadores, rotas, estados: inglês.** Texto visível ao utilizador: PT-PT. Docs: PT-PT.
-- C#: nullable ativado, `TreatWarningsAsErrors`, `dotnet format`. Async em todo o I/O. Sem lógica de negócio em controllers/endpoints.
-- TypeScript: `strict`, ESLint + Prettier. Tipos da API gerados a partir do `openapi.yaml` (não escrever à mão).
-- Tabelas e colunas em `snake_case`; propriedades C# em `PascalCase`.
-- Datas sempre em UTC (`timestamptz`); apresentar em `Europe/Lisbon`.
-- Dinheiro: `decimal(10,2)`. Nunca `float`/`double`.
-- Unidades explícitas no nome: `mileage_km`, `engine_cc`, `power_kw`.
-- Erros: ProblemDetails (RFC 9457). Validação → 400; regra de estado/publicação → 422 com campos em falta.
-- Paginação: `{ items, page, pageSize, totalCount }`.
-- Commits pequenos, mensagem em inglês, imperativo (`Add vehicle publish validation`).
+## Conventions
+- C#: nullable enabled, `TreatWarningsAsErrors`, `dotnet format`. Async for all I/O. No business logic in endpoints.
+- TypeScript: `strict`, ESLint + Prettier. API types generated from `openapi.yaml` (never hand-written).
+- Tables and columns in `snake_case`; C# properties in `PascalCase`.
+- Dates always in UTC (`timestamptz`); displayed in `Europe/Lisbon`.
+- Money: `decimal(10,2)`. Never `float`/`double`.
+- Units explicit in names: `mileage_km`, `engine_cc`, `power_kw`.
+- Errors: ProblemDetails (RFC 9457). Validation → 400; invalid state transition → 409; publish rules → 422 with missing fields.
+- Pagination: `{ items, page, pageSize, totalCount }`.
+- Small commits, imperative English messages (`Add vehicle publish validation`). PRs reference their issue (`Closes #N`).
 
-## Regras de segurança (inegociáveis)
-- **Nunca** expor na API pública ou no site: matrícula, VIN, notas internas, documentos, dados de utilizadores. DTOs públicos e admin são classes distintas; nunca devolver entidades EF.
-- Todos os `/api/admin/*` exigem sessão de um email na tabela `admin_users` ativo. Autorização no backend; o frontend não é fronteira de segurança.
-- Sessão por cookie `HttpOnly`, `Secure`, `SameSite=Lax` + antiforgery em pedidos que alteram estado. **Nunca** tokens em `localStorage`.
-- Uploads: validar extensão + MIME + magic bytes; limites de tamanho; chaves de storage aleatórias; re-codificar imagens (remove EXIF).
-- Documentos: só bucket privado; download por URL pré-assinada curta, emitida após verificar sessão e que o documento pertence ao `vehicleId` (anti-IDOR).
-- Nenhum segredo no Git (connection strings, chaves R2, client secret Google, PAT GitHub). Local: `dotnet user-secrets` / `.env.local` (ignorado). Produção: segredos do Azure / GitHub.
-- Logs estruturados sem segredos, tokens, VIN, matrícula ou conteúdos de documentos.
-- Nunca usar dados reais (pessoas, matrículas, VIN, documentos) em testes, fixtures ou screenshots.
+## Security rules (non-negotiable)
+- **Never** expose in the public API or on the site: registration number, VIN, internal notes, documents, user data. Public and admin DTOs are separate classes; never return EF entities.
+- Every `/api/admin/*` endpoint requires a session for an email that is active in `admin_users`. Authorisation in the backend; the frontend is not a security boundary.
+- Cookie session `HttpOnly`, `Secure`, `SameSite=Lax` + antiforgery on state-changing requests. **Never** tokens in `localStorage`.
+- Uploads: validate extension + MIME + magic bytes; size limits; random storage keys; re-encode images (strips EXIF).
+- Documents: private bucket only; download via a short-lived pre-signed URL, issued after checking the session and that the document belongs to the `vehicleId` (anti-IDOR).
+- No secrets in Git (connection strings, R2 keys, Google client secret, GitHub PAT). Locally: `dotnet user-secrets` / `.env.local` (ignored). Production: Azure / GitHub secrets.
+- Structured logs without secrets, tokens, VIN, registration numbers or document contents.
+- Never use real data (people, registration numbers, VINs, documents) in tests, fixtures or screenshots.
 
 ## Definition of Done
-Uma tarefa só está concluída quando:
-- O comportamento está implementado de ponta a ponta, com validação no backend e erros tratados (sem UI de demonstração com dados hardcoded).
-- Tem testes unitários **e** de integração; **todos os testes passam** (`dotnet test`, `npm test`).
-- A autorização foi verificada (testes de 401/403 para endpoints novos em `/api/admin/*`).
-- Não há segredos nem dados reais no repositório.
-- `openapi.yaml`, ADRs e docs foram atualizados se o comportamento mudou.
-- A sessão principal reviu a alteração (e o `reviewer` para alterações relevantes).
+A task is done only when:
+- The behaviour is implemented end to end, with backend validation and error handling (no demo UI with hard-coded data).
+- It has unit **and** integration tests; **all tests pass** (`dotnet test`, `npm test`).
+- Authorisation has been verified (401/403 tests for new `/api/admin/*` endpoints).
+- There are no secrets or real data in the repository.
+- `openapi.yaml`, ADRs and docs are updated if behaviour changed.
+- The main session reviewed the change (and the `reviewer` for significant changes).
+- The issue's acceptance criteria are all checked and the PR closes the issue.
 
-## Nunca fazer
-- Criar microserviços, filas, caches distribuídas ou multi-tenancy.
-- Acrescentar funcionalidades fora do MVP (Leads, DealershipProfile, estado Reserved, favoritos, comparação…) sem aprovação explícita.
-- Adicionar uma dependência sem justificar a necessidade e confirmar que não existe alternativa no projeto.
-- Alterar `openapi.yaml`, migrações, `.github/`, `Dockerfile` ou `infra/` a partir de um subagente.
-- Usar serviços pagos ou sair do free tier sem aprovação do dono.
-- Usar Supabase (pausa por inatividade).
-- Fazer push para `main`, force push, ou commits sem pedido do utilizador.
+## Never
+- Create microservices, queues, distributed caches or multi-tenancy.
+- Add features outside the MVP (Leads, DealershipProfile, Reserved status, favourites, comparison…) without explicit approval.
+- Add a dependency without justifying it and confirming there is no existing alternative in the project.
+- Change `openapi.yaml`, migrations, `.github/`, `Dockerfile` or `infra/` from a subagent.
+- Use paid services or exceed the free tier without the owner's approval.
+- Use Supabase (pauses on inactivity).
+- Push to `main`, force push, or commit without the user asking.
 
-## Delegação a subagentes
-Agentes em `.claude/agents/`. A sessão principal é dona de: `docs/api/openapi.yaml`, migrações EF, integração, revisão final, CI/CD e infra (`.github/`, `Dockerfile`, `infra/`).
+## Delegating to subagents
+Agents live in `.claude/agents/`. The main session owns: `docs/api/openapi.yaml`, EF migrations, integration, final review, CI/CD and infra (`.github/`, `Dockerfile`, `infra/`).
 
-| Agente | Pode alterar | Quando usar |
+| Agent | May change | When to use |
 |---|---|---|
-| `backend` | `src/` (exceto migrações) | Implementar endpoints/casos de uso já definidos no OpenAPI |
-| `frontend` | `web/` | Implementar páginas/componentes definidos em `docs/design/` |
-| `qa-security` | `tests/` (inclui `tests/e2e/`) | Testes de integração, autorização, IDOR, uploads, E2E; reporta falhas |
-| `reviewer` | nada | Revisão com contexto novo antes de fechar uma fase ou alteração sensível |
+| `backend` | `src/` (except migrations) | Implement endpoints/use cases already defined in the OpenAPI |
+| `frontend` | `web/` | Implement pages/components defined in `docs/design/` |
+| `qa-security` | `tests/` (incl. `tests/e2e/`) | Integration, authorisation, IDOR, upload and E2E tests; reports failures |
+| `reviewer` | nothing | Fresh-context review before closing a phase or a sensitive change |
 
-Regras:
-- Só delegar depois de o contrato (OpenAPI + modelo) da funcionalidade estar fechado.
-- Dois agentes nunca editam os mesmos ficheiros ao mesmo tempo.
-- Cada brief indica: objetivo, ficheiros/pastas permitidos, contrato a seguir, critérios de aceitação.
-- Cada agente devolve: resumo, ficheiros alterados, testes executados (com resultado), decisões pendentes.
-- A sessão principal **re-executa os testes** antes de aceitar. "Terminei" de um agente não é prova.
-- Se um agente precisar de mudar o contrato ou uma migração, devolve o pedido à sessão principal em vez de o fazer.
+Rules:
+- Only delegate once the feature's contract (OpenAPI + model) is closed.
+- Two agents never edit the same files at the same time.
+- Every brief states: goal, allowed files/folders, contract to follow, acceptance criteria (link the GitHub issue).
+- Every agent returns: summary, changed files, tests run (with results), pending decisions.
+- The main session **re-runs the tests** before accepting. An agent saying "done" is not proof.
+- If an agent needs to change the contract or a migration, it hands the request back to the main session instead.
 
-## Comandos (a preencher na Fase 1)
+## Commands (to be filled in during Phase 1)
 ```
 dotnet build / dotnet test
 cd web && npm run dev / npm test
