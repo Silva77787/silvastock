@@ -1,5 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <!-- Shared framework: options, DI, health-check abstractions (and later auth/OIDC) without extra NuGet packages. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\SilvaStock.Application\SilvaStock.Application.csproj" />
     <ProjectReference Include="..\SilvaStock.Domain\SilvaStock.Domain.csproj" />
   </ItemGroup>

@@ -1,8 +1,24 @@
+using SilvaStock.Api.Cors;
+using SilvaStock.Api.ErrorHandling;
+using SilvaStock.Api.Health;
+using SilvaStock.Api.Logging;
+using SilvaStock.Infrastructure;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.AddApiJsonLogging();
+
+builder.Services.AddApiProblemDetails();
+builder.Services.AddApiCors(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddApiHealthChecks();
 
 var app = builder.Build();
 
-// Endpoints, ProblemDetails, logging and /health are added in F1-03.
+app.UseApiErrorHandling();
+app.UseCors();
+
+app.MapApiHealthChecks();
 
 await app.RunAsync();
 
