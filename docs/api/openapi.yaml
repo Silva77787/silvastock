@@ -651,7 +651,7 @@ components:
         Lifetime: **30 days, sliding** (renewed on a request made after more than half of the
         window, so it expires after 15–30 days without use), with an **absolute maximum of 90 days**
         from the login. On every request the API re-checks the admin in `admin_users`: unknown,
-        revoked (`session_version` changed by logout or `remove-admin`) or past 90 days → 401;
+        revoked (`session_version` changed by logout, `remove-admin` or `reset-google`) or past 90 days → 401;
         inactive → 403. Both delete the cookie.
 
   parameters:
