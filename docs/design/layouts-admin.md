@@ -33,7 +33,7 @@ Admin URL query params: inventory `?q=&estado=rascunho|publicada|vendida&ordem=&
         │ [S] SilvaStock                               │  padding 32, gap 24,
         │ H2 Entrar no back office                     │  radius xl, shadow md,
         │ Acesso reservado aos administradores…        │  1px border.default
-        │ [Alert — only on error/429/expired]          │
+        │ [Alert — error / rate_limited / expired]        │
         │ [ G  Entrar com Google ]  (52 tall, full w)  │
         │ Ao entrar, é usada a sua conta Google…       │  bodySm secondary
         └──────────────────────────────────────────────┘

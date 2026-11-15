@@ -190,11 +190,13 @@ export interface paths {
         /**
          * Starts the Google (OIDC) login
          * @description Opened by full-page navigation (a plain link), never by `fetch`.
-         *     `returnUrl` must be a relative path starting with `/admin` (no scheme, host, `//`, `\`
-         *     or `..` segments); anything else is replaced by `/admin`. It is carried through the
-         *     OIDC round trip and used only after a successful login.
-         *     Rate limited per client IP; when exceeded it redirects to `{site}/admin/login?error=rate_limited`
-         *     instead of returning 429.
+         *     `returnUrl` is accepted only if it equals `/admin` or starts with `/admin/` or `/admin?`;
+         *     it must have no control characters, backslash, `//` or `..` segments (also after
+         *     percent-decoding), and the resulting absolute URL must stay on the site's origin.
+         *     Anything else is replaced by `/admin`. It travels only inside the protected OIDC state
+         *     and is used only after a successful login.
+         *     Rate limited per client IP (shared with the callback); when exceeded it redirects to
+         *     `{site}/admin/login?error=rate_limited` instead of returning 429.
          */
         get: {
             parameters: {
@@ -238,14 +240,17 @@ export interface paths {
         };
         /**
          * Google OIDC callback (handled by the authentication middleware)
-         * @description Validates the OIDC response (state, nonce, `id_token`) and requires `email_verified = true`
-         *     and an active row in `admin_users` (email compared case-insensitively).
+         * @description Google redirects here with `?code=…&state=…` (`response_mode=query`). Validates the OIDC
+         *     response (state, nonce, PKCE, `id_token` issuer/audience), then requires the `email_verified`
+         *     claim to be present and `true`, an active row in `admin_users` (email lower-cased), and a
+         *     matching `google_sub` (bound on the first login).
          *     - Success → issues the session cookie, updates `admin_users.last_login_at` and redirects to
          *       `{site}{returnUrl}`.
-         *     - Email not verified, not on the allowlist or inactive → **no** session; redirects to
-         *       `{site}/admin/login?error=not_allowed` (generic message, never reveals whether the email exists).
+         *     - Email not verified, not on the allowlist, inactive, or a different Google account
+         *       (`sub`) → **no** session; redirects to `{site}/admin/login?error=not_allowed`
+         *       (generic message, never reveals whether the email exists).
          *     - Cancelled at Google, invalid/expired state or any other OIDC error → **no** session;
-         *       redirects to `{site}/admin/login?error=login_failed`.
+         *       redirects to `{site}/admin/login?error=login_failed`. Google's error text is never reflected.
          *     - Rate limit exceeded → redirects to `{site}/admin/login?error=rate_limited`.
          *     `{site}` is the configured site base URL (e.g. `http://localhost:3000` locally).
          */
@@ -287,7 +292,9 @@ export interface paths {
         put?: never;
         /**
          * Ends the session
-         * @description Called with `fetch` (credentials included). The site then navigates to `/admin/login`.
+         * @description Called with `fetch` (credentials included). Increments `admin_users.session_version`, which
+         *     revokes this admin's sessions **on every device**, and deletes the cookie. Not subject to the
+         *     allowlist check or to rate limiting. The site then navigates to `/admin/login`.
          */
         post: {
             parameters: {
@@ -1508,16 +1515,6 @@ export interface components {
         /** @description File type not accepted (real content does not match an allowed format). */
         UnsupportedMediaType: {
             headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["ProblemDetails"];
-            };
-        };
-        /** @description Rate limit exceeded. */
-        TooManyRequests: {
-            headers: {
-                "Retry-After"?: number;
                 [name: string]: unknown;
             };
             content: {

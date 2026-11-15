@@ -3,40 +3,85 @@
 **Status:** Accepted · 2026-11-14 (confirmed by the owner) · Amended 2026-11-15 when the Phase 2 contract was closed (F2-01; see "Amendments")
 
 ## Context
-Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity with email + password) means managing passwords, lockout and account recovery (SMTP or a manual procedure).
+Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity with email + password) means managing passwords, lockout and account recovery (SMTP or a manual procedure). The static site runs on `www.<domain>` and the API on `api.<domain>` (same registrable domain, ADR-0002), behind the Azure Container Apps ingress, which terminates TLS.
 
 ## Decision
-- **Google login (OpenID Connect)** in the ASP.NET Core backend (`/api/auth/login/google` → Google → `/api/auth/callback/google`), authorization code flow with state and nonce.
-- **Allowlist:** `admin_users` table. After the callback, if `email_verified` is not `true` or the email is not in `admin_users` with `is_active = true` → **reject without creating a session** and redirect to `{site}/admin/login?error=not_allowed`. Emails are stored lower-case and compared case-insensitively.
-- **Session:** ASP.NET authentication cookie `__Host-silvastock-auth`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, host-only on the API host. **30-day sliding expiration** (owner decision): renewed while used, expires after 30 days without use. No JWT, no long-lived tokens in the browser.
-- **Data Protection keys** (which encrypt the session cookie and antiforgery tokens) are **persisted in Postgres** (`data_protection_keys` table). Otherwise every container restart or scale-to-zero (ADR-0002) would invalidate all sessions.
-- **CSRF:** ASP.NET antiforgery. `GET /api/admin/me` returns a `csrfToken` in its JSON body; the frontend keeps it in memory and sends it in the `X-XSRF-TOKEN` header on `POST/PUT/PATCH/DELETE` (including logout). The antiforgery cookie itself stays `HttpOnly` on the API host.
-- **Authorisation:** `Admin` policy on every `/api/admin/*`; on every request it checks that the user is still active on the allowlist (removing them from the table revokes access on the next request). API calls without a session get `401` ProblemDetails, never a redirect to Google.
-- **Browser-navigation errors:** the login and callback endpoints always redirect to the site, never return JSON: `{site}/admin/login?error=not_allowed | rate_limited | login_failed`. `{site}` is a configured base URL; `returnUrl` only accepts relative paths under `/admin`.
-- **Display name:** `admin_users.display_name` if set, else the Google account name, else the email.
-- **Last login:** `admin_users.last_login_at` is updated on every successful login (owner decision), and shown by `list-admins`.
-- **Management:** CLI commands `add-admin <email> [--name]`, `remove-admin <email>` and `list-admins`, run with the production connection string. A management screen is outside the MVP.
-- **Rate limiting** (ASP.NET `RateLimiter`, fixed window per client IP) on `/api/auth/*`. Initial value: 20 requests per 5 minutes per IP, configurable.
-- **CORS:** only the site origin, with credentials. **Host filtering:** `AllowedHosts` is set to the API host in production (it is `*` only for local development).
+
+### Login (Google OpenID Connect)
+- ASP.NET Core OpenID Connect handler: `ResponseType = code`, **`ResponseMode = query`** (so the callback is a top-level `GET /api/auth/callback/google`), `UsePkce = true`, **`SaveTokens = false`** (no Google tokens in the session cookie), `GetClaimsFromUserInfoEndpoint = false`, scopes `openid email profile`. Issuer `https://accounts.google.com` and audience = client ID, validated by the handler. Correlation and nonce cookies are `Secure` (always) and short-lived.
+- The OIDC handler is **never the default challenge scheme**: it is only challenged explicitly by `GET /api/auth/login/google`.
+- After the token is validated:
+  1. `email_verified` must be present and equal to `true`; otherwise `not_allowed`.
+  2. The email is normalised with `ToLowerInvariant()` and looked up in `admin_users` (unique index on the normalised value); it must exist with `is_active = true`; otherwise `not_allowed`.
+  3. **Google account binding:** if `admin_users.google_sub` is null it is set to the token's `sub` (first login); if it is set and differs, `not_allowed`. This stops a different Google account that later owns the same email (e.g. a lapsed custom domain) from signing in.
+  4. `last_login_at` is updated and the session cookie is issued.
+- Cancelled at Google (`access_denied`), invalid/expired state or nonce, or any other remote failure: handled in `OnRemoteFailure`/`OnAccessDenied` with `HandleResponse()` and a redirect to `{site}/admin/login?error=login_failed`. Google's `error`/`error_description` and exception text are never reflected.
+- **Errors always redirect** (the login is a full-page navigation): `{site}/admin/login?error=not_allowed | rate_limited | login_failed`. The site shows a generic message for any unknown code.
+- **`returnUrl`:** accepted only if it is a relative path equal to `/admin` or starting with `/admin/` or `/admin?` (segment-aware: `/adminx` is rejected); max 512 characters; no control characters (including tab, CR, LF), no backslash, no `//`, no `..` segments, also after percent-decoding. The final URL is built as `new Uri(siteBase, returnUrl)` and must have the configured site's scheme, host and port. Anything else falls back to `/admin`. The value travels only inside the protected `AuthenticationProperties` (OIDC state), never in a plain cookie.
+- `{site}` is a configured base URL (`Site:BaseUrl`, e.g. `http://localhost:3000` locally, `https://www.<domain>` in production).
+
+### Session
+- ASP.NET cookie authentication. Cookie **`__Host-silvastock-auth`**: `HttpOnly`, `Secure` (`CookieSecurePolicy.Always`), `SameSite=Lax`, `Path=/`, no `Domain` (host-only on the API host), **persistent** (`IsPersistent = true`).
+- **Lifetime (owner decisions):** `ExpireTimeSpan` = 30 days with `SlidingExpiration`. ASP.NET renews the cookie only on a request made after more than half of the window has passed, so in practice it expires after 15–30 days without use. **Absolute maximum of 90 days** from the original login (`issued_at` claim): after that a new Google login is always required.
+- Claims: admin `id`, email, `session_version`, the Google `name` claim (used as the display-name fallback; not persisted), `issued_at`. No tokens.
+- **Validation on every request** (`OnValidatePrincipal`, reusing the allowlist lookup by admin `id`):
+  - admin not found, `session_version` different from the database, or the 90-day maximum exceeded → reject the principal and delete the cookie → `401`;
+  - admin inactive → `403`, the cookie is deleted and not renewed.
+- **Revocation (owner decision):** `admin_users.session_version` (integer). `POST /api/auth/logout` and `remove-admin` increment it, which **signs that admin out on every device** (acceptable for 2–3 admins) and makes a copied cookie useless.
+- API calls never redirect: `OnRedirectToLogin` → `401` ProblemDetails, `OnRedirectToAccessDenied` → `403` ProblemDetails, both without a `Location` header.
+- **Display name:** `admin_users.display_name` if set, else the Google `name` claim from the session, else the email.
+
+### Authorisation and error precedence
+- `Admin` policy on the whole `/api/admin` route group (no admin endpoint can be added without it).
+- For **every** method, checks run in this order and the first failure wins: **401** (no/invalid/revoked session) → **403** (not active on the allowlist) → **400** (missing or invalid antiforgery token, unsafe methods only).
+
+### CSRF
+- `GET /api/admin/me` returns a `csrfToken` in its JSON body. The site cannot read API cookies (different host), so it keeps the token in memory and sends it as **`X-XSRF-TOKEN`** (`AntiforgeryOptions.HeaderName`) on `POST/PUT/PATCH/DELETE`.
+- Antiforgery cookie `__Host-silvastock-xsrf`: `HttpOnly`, `Secure` (always), `SameSite=Strict`, `Path=/`.
+- **Enforced explicitly** by an endpoint filter on every unsafe method of the `/api/admin` group and on `POST /api/auth/logout`, calling `IAntiforgery.ValidateRequestAsync` and returning `400` ProblemDetails (pt-PT). The default `UseAntiforgery()` middleware only validates form-bound endpoints and is not relied on.
+
+### Rate limiting
+- ASP.NET `RateLimiter`, registered **before authentication** (the callback is handled by the authentication middleware and never reaches an endpoint).
+- Global limiter partitioned by **client IP** for requests whose path starts with `/api/auth/login/` or `/api/auth/callback/`: fixed window, 20 requests per 5 minutes per IP (configurable). `OnRejected` answers `302` to `{site}/admin/login?error=rate_limited` (never 429/503 to the browser).
+- `POST /api/auth/logout` is **not** rate limited.
+
+### Proxy, hosts and CORS
+- **Forwarded headers** first in the pipeline: `XForwardedFor | XForwardedProto` (not `XForwardedHost`), `ForwardLimit = 1`, trusting only the Container Apps ingress (configured known networks/proxies). The rate-limit key is the resolved `RemoteIpAddress`. If Cloudflare ever proxies `api.<domain>`, the trusted client-IP source is revisited in F7-05.
+- **`AllowedHosts`** = the API host in production (`*` only in Development). Container Apps probes use TCP so they are not rejected (see ADR-0003: `/health` wakes the database).
+- **CORS:** exactly the site origin (`https://www.<domain>` in production; `http://localhost:3000` in Development), with credentials and `Vary: Origin`. No wildcards, patterns, preview origins or `http:` origins outside Development.
+- Google redirect URIs registered exactly: `https://api.<domain>/api/auth/callback/google` and `http://localhost:5080/api/auth/callback/google`.
+
+### Data Protection
+- Keys persisted in Postgres with **`Microsoft.AspNetCore.DataProtection.EntityFrameworkCore`** (justified dependency: the official way to share keys across restarts and instances), table `data_protection_keys`. This framework-owned table keeps the package's `int` key, an accepted exception to the "bigint identity" rule.
+- `SetApplicationName("SilvaStock")`. One key ring per environment: production keys are never copied into development or preview databases.
+
+### Management and logging
+- CLI: `add-admin <email> [--name]`, `remove-admin <email>` (deactivates and increments `session_version`), `list-admins` (shows `last_login_at`). A management screen is outside the MVP.
+- Failed logins log the outcome and error code only, never the full email, tokens or cookie values (at most the email domain).
+- **Local development:** the API runs on `http://localhost:5080`; `Secure`/`__Host-` cookies over `http://localhost` work in Chromium-based browsers and Firefox (not Safari). Integration tests use `https://localhost` as the client base address.
 
 ## Consequences
 - + Zero stored passwords; MFA and account recovery are handled by Google.
 - + Recovery if everyone is locked out: run `add-admin` with another Google account.
 - + Sessions survive deployments and scale-to-zero thanks to persisted Data Protection keys.
-- − Every admin needs a Google account; dependency on an external provider.
+- + Logout and `remove-admin` revoke sessions server-side on all devices; the 90-day cap bounds a stolen cookie's lifetime.
+- − Every admin needs a Google account; dependency on an external provider. Changing an admin's Google account requires clearing `google_sub` (CLI, in F2-05).
 - − Requires a Google Cloud project with an OAuth consent screen (free); redirect URIs for localhost and the production domain.
 - − API on a different host from the site → requires the same registrable domain (ADR-0002).
-- − A 30-day session means a stolen cookie stays usable for long. Mitigations: `HttpOnly` + `Secure` + host-only cookie, allowlist re-checked on every request (`remove-admin` revokes immediately), logout deletes the cookie. Admins should not use shared computers.
-- − Data Protection keys in Postgres are not encrypted at rest by ASP.NET on Linux; they are protected by the database's access control (connection string only in secrets).
-- Responses: `401` without a session; `403` with a session but outside the allowlist/inactive; `400` for a missing/invalid antiforgery token. Tests prove them for every admin endpoint.
+- − Logging out on one device logs that admin out everywhere.
+- − Data Protection keys in Postgres are not encrypted at rest by ASP.NET on Linux: anyone with database read access could forge a session. Mitigations: connection string only in secrets, separate key rings per environment, `session_version` and the 90-day cap. Certificate-protected keys can be added later.
+- − Any XSS on the site could read `csrfToken` and act as the admin; a strict Content-Security-Policy is tracked as a Phase 5 task.
 
 ## Amendments
-**2026-11-15 — F2-01 (Phase 2 contract closed with the owner)**
+**2026-11-15 — F2-01 (Phase 2 contract closed with the owner, after two review rounds)**
 | Topic | Before | Now | Why |
 |---|---|---|---|
-| Session lifetime | Proposal: 8 h sliding, max 7 days | 30 days sliding | Owner decision |
-| CSRF token delivery | Readable `XSRF-TOKEN` cookie | `csrfToken` in the `GET /api/admin/me` body | The site and the API run on different hosts (`www.` vs `api.`), so JavaScript on the site cannot read a host-only API cookie; the original design could not work |
-| Login errors | 429 JSON from the login endpoint | Redirect with `?error=rate_limited` / `login_failed` | Login is a full-page navigation; a JSON 429 would show raw JSON to the user (code review of PR #56) |
-| Data Protection keys | Not specified | Persisted in Postgres | Required for sessions to survive restarts and scale-to-zero |
-| `admin_users` | id, email, display_name, is_active, created_at | + `last_login_at`; email lower-case unique | Owner decision; case-insensitive matching |
-| Host filtering | `AllowedHosts: *` | Restricted in production | Code review of PR #53 (Host header poisoning of redirect URIs) |
+| Session lifetime | Proposal: 8 h sliding, max 7 days | 30 days sliding (renewed after half the window), absolute max 90 days | Owner decisions |
+| Logout / revocation | Logout deletes the cookie | `session_version` in `admin_users`, incremented by logout and `remove-admin` (all devices) | A stateless cookie stays valid after logout; owner decision |
+| Google account binding | Email only | `google_sub` bound on first login | Owner decision; email addresses can change hands |
+| CSRF token delivery | Readable `XSRF-TOKEN` cookie | `csrfToken` in the `GET /api/admin/me` body, enforced by an explicit filter | The site cannot read host-only API cookies; ASP.NET does not validate JSON endpoints by default |
+| Login errors | 429 JSON from the login endpoint | Redirect with `?error=rate_limited` / `login_failed` | Login is a full-page navigation (code review of PR #56) |
+| OIDC details | Not specified | `code` + `query` + PKCE, no saved tokens | Matches the GET callback; keeps tokens out of the cookie |
+| Proxy / hosts / CORS | `AllowedHosts: *`; not specified | Forwarded headers from the ingress only, restricted hosts, exact CORS origin | Code review of PR #53; TLS ends at the ingress |
+| Data Protection keys | Not specified | Persisted in Postgres (EF Core package) | Sessions must survive restarts and scale-to-zero |
+| `admin_users` | id, email, display_name, is_active, created_at | + `last_login_at`, `session_version`, `google_sub`; email lower-case unique | Owner decisions |

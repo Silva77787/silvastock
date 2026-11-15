@@ -11,10 +11,10 @@
 
 **AC-01 — Login (Phase 2)**
 - Given a verified Google email that is active in `admin_users`, when the user logs in, then they reach the back office.
-- An email that is not on the allowlist, inactive or unverified does not get a session, and the message is generic (it does not reveal whether the email exists).
-- Repeated attempts are rate limited (429).
-- Without a session, any `/api/admin/*` returns 401; with a session outside the allowlist, 403.
-- Logout invalidates the session.
+- An email that is not on the allowlist, inactive, unverified, or a different Google account than the one bound to it does not get a session, and the message is generic (it does not reveal whether the email exists).
+- Repeated login attempts are rate limited per IP: the browser is redirected to `/admin/login?error=rate_limited` and no session is created.
+- Without a session, any `/api/admin/*` returns 401; with a session outside the allowlist, 403 (and the cookie is deleted); unsafe requests without a valid `X-XSRF-TOKEN`, 400 — in that order.
+- Logout revokes the admin's sessions on every device (`session_version`): a copied cookie replayed after logout gets 401. Sessions also end after 15–30 days without use and at most 90 days after login.
 
 **AC-02 — Create a Draft (Phase 3)**
 - With a valid session and make + model filled in, the vehicle is created as `Draft` and does not appear in the public API or on the site.
