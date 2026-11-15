@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/SilvaStock.Api/SilvaStock.Api.csproj" />
+  <Project Path="src/SilvaStock.Application/SilvaStock.Application.csproj" />
+  <Project Path="src/SilvaStock.Cli/SilvaStock.Cli.csproj" />
+  <Project Path="src/SilvaStock.Domain/SilvaStock.Domain.csproj" />
+  <Project Path="src/SilvaStock.Infrastructure/SilvaStock.Infrastructure.csproj" />
+  <Project Path="tests/SilvaStock.IntegrationTests/SilvaStock.IntegrationTests.csproj" />
+  <Project Path="tests/SilvaStock.UnitTests/SilvaStock.UnitTests.csproj" />
+</Solution>
