@@ -12,3 +12,4 @@ The ADRs derive from `docs/DECISIONS.md` (2026-11-14). A changed decision create
 | [0005](0005-file-storage.md) | Files: Cloudflare R2, public and private buckets | Accepted |
 | [0006](0006-identifiers-and-urls.md) | bigint IDs and slug-less URLs | Accepted |
 | [0007](0007-static-site-and-rebuild.md) | Static site + rebuild via workflow_dispatch | Accepted |
+| [0008](0008-local-s3-rustfs.md) | Local S3-compatible storage: RustFS (replaces MinIO) | Accepted |
