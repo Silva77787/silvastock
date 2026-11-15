@@ -16,6 +16,12 @@ public class SilvaStockApiFactory(string connectionString, string environment = 
 
     public const string ConnectionStringKey = "ConnectionStrings:Default";
 
+    /// <summary>Required at startup by the API's CORS options validation.</summary>
+    public const string CorsOriginKey = "Cors:AllowedOrigins:0";
+
+    /// <summary>Fictitious site origin used by tests (reserved <c>.test</c> TLD).</summary>
+    public const string TestSiteOrigin = "https://www.silvastock.test";
+
     /// <summary>
     /// A syntactically valid connection string that points at a closed local port, so every
     /// connection attempt is refused quickly. Fictitious credentials.
@@ -42,10 +48,12 @@ public class SilvaStockApiFactory(string connectionString, string environment = 
 
         builder.UseEnvironment(environment);
         builder.UseSetting(ConnectionStringKey, ConnectionString);
+        builder.UseSetting(CorsOriginKey, TestSiteOrigin);
         builder.ConfigureAppConfiguration((_, config) =>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [ConnectionStringKey] = ConnectionString,
+                [CorsOriginKey] = TestSiteOrigin,
             }));
     }
 }
