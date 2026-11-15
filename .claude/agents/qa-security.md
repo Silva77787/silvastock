@@ -20,7 +20,7 @@ You are the SilvaStock **qa-security** agent. Read `CLAUDE.md`, `docs/DECISIONS.
 
 ## Rules
 - Only fictitious, generated data (never real registration numbers, VINs or documents).
-- Integration against a real Postgres via Testcontainers; storage with a fake/MinIO, never the real R2.
+- Integration against a real Postgres via Testcontainers; storage with a fake or a RustFS container (S3-compatible, see ADR-0008), never the real R2.
 - Deterministic tests, independent of each other. Test names in English.
 
 ## Deliverable (mandatory)

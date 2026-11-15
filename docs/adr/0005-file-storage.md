@@ -6,7 +6,7 @@
 Photos are public and read often; documents (registration certificate, purchase, inspection…) contain personal data and are strictly private. Cost ~zero; no egress fees.
 
 ## Decision
-- **Cloudflare R2**, accessed through the **AWS SDK for .NET (S3)**, behind an `IObjectStorage` interface in Application (testable with a fake/MinIO).
+- **Cloudflare R2**, accessed through the **AWS SDK for .NET (S3)**, behind an `IObjectStorage` interface in Application (testable with a fake or a local RustFS container, see ADR-0008).
 - **Public bucket (`photos`)**: served from R2's public domain (or our own subdomain once we have a domain).
   - Uploads go **through the API** (multipart): validate extension + MIME + magic bytes; accept JPEG, PNG, WebP; max **10 MB**, max **30 photos per vehicle**.
   - Re-encoding with **ImageSharp** (strips EXIF/GPS, applies orientation), a web version + **WebP thumbnail**.

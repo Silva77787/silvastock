@@ -28,7 +28,7 @@ Phase 1 (Foundation) in progress. The backlog lives in the [SilvaStock — MVP p
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js](https://nodejs.org/) (LTS or newer) and npm
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (local Postgres/MinIO and integration tests)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (local Postgres/RustFS and integration tests)
 - Git
 
 ## Getting started
@@ -43,11 +43,25 @@ The commands below become available as the Phase 1 tasks land:
 
 | What | Command | Available after |
 |---|---|---|
-| Start Postgres + MinIO | `docker compose up -d` | F1-04 |
+| Start Postgres + RustFS (S3) | `docker compose up -d` | F1-04 |
 | Build and test the API | `dotnet build` · `dotnet test` | F1-02 / F1-05 |
 | Run the API | `dotnet run --project src/SilvaStock.Api` | F1-03 |
 | Frontend dev server | `cd web && npm install && npm run dev` | F1-06 |
 | Frontend tests | `cd web && npm test` | F1-06 |
+
+### Local services (`docker compose`)
+
+| Service | Address | Notes |
+|---|---|---|
+| Postgres 17 | `localhost:5432` | User, password and database from `.env` |
+| RustFS S3 API | `http://localhost:9000` | S3-compatible stand-in for Cloudflare R2 (path-style addressing) |
+| RustFS console | `http://localhost:9001` | Log in with `S3_ACCESS_KEY` / `S3_SECRET_KEY` from `.env` |
+
+On start-up the one-shot `s3-init` job creates two buckets:
+- `photos`: anonymous read on objects, like the public R2 bucket;
+- `documents`: private, readable only with credentials or a pre-signed URL.
+
+The ports are bound to `127.0.0.1` only. Stop with `docker compose down`; add `-v` to also delete the local data.
 
 ## Repository layout
 
