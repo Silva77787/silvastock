@@ -108,7 +108,8 @@ Definition of Done: unit + integration tests passing, authorisation verified, no
 ## 12. Still open
 - Domain (.com on Cloudflare ~$11/year vs .pt) — decide in Phase 7, before the first deployment.
 - ~~Login: Google vs Identity~~ → resolved: Google (see §5 and ADR-0004).
-- Free-tier prices/quotas (Azure Container Apps, Neon, R2): **re-check before implementing** (issue F1-08).
+- ~~Free-tier prices/quotas~~ → verified on 2026-11-14 (ADRs 0002, 0003, 0005): everything fits ~zero cost. Budget alerts do not cap spending; production photos need our own subdomain (`r2.dev` is development-only).
+- **ImageSharp licence (owner decision):** free use requires the repo to be open source/source-available (no `LICENSE` yet) or the dealership to have < 1M USD annual revenue; recent versions also need a free build-time licence key. Decide before F4-03.
 
 ## 13. Accounts
 Neon: created. Azure: created. Cloudflare: to confirm. Google Cloud: only in the login phase.
