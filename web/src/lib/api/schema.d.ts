@@ -29,10 +29,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            /** @enum {string} */
-                            status?: "Healthy" | "Degraded" | "Unhealthy";
-                        };
+                        "application/json": components["schemas"]["HealthStatus"];
                     };
                 };
                 /** @description Unhealthy */
@@ -40,7 +37,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["HealthStatus"];
+                    };
                 };
             };
         };
@@ -1157,6 +1156,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        HealthStatus: {
+            /** @enum {string} */
+            status: "Healthy" | "Degraded" | "Unhealthy";
+        };
         /** @enum {string} */
         VehicleStatus: "Draft" | "Published" | "Sold";
         /** @enum {string} */
