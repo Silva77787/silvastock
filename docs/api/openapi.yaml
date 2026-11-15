@@ -19,6 +19,7 @@ info:
       For every method the checks run in this order and the first failure wins:
       no/invalid/revoked session → 401; not active on the allowlist → 403;
       missing/invalid antiforgery (unsafe methods) → 400. API calls never redirect.
+      Every `/api/admin/*` response has `Cache-Control: no-store`.
     - Browser-navigation endpoints (`/api/auth/login/google`, `/api/auth/callback/google`)
       never return JSON errors: they always redirect to the site, to `{site}/admin/login?error=<code>`
       on failure (codes: `not_allowed`, `rate_limited`, `login_failed`).

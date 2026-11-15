@@ -24,11 +24,16 @@ Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity 
 - ASP.NET cookie authentication. Cookie **`__Host-silvastock-auth`**: `HttpOnly`, `Secure` (`CookieSecurePolicy.Always`), `SameSite=Lax`, `Path=/`, no `Domain` (host-only on the API host), **persistent** (`IsPersistent = true`).
 - **Lifetime (owner decisions):** `ExpireTimeSpan` = 30 days with `SlidingExpiration`. ASP.NET renews the cookie only on a request made after more than half of the window has passed, so in practice it expires after 15–30 days without use. **Absolute maximum of 90 days** from the original login (`issued_at` claim): after that a new Google login is always required.
 - Claims: admin `id`, email, `session_version`, the Google `name` claim (used as the display-name fallback; not persisted), `issued_at`. No tokens.
-- **Validation on every request** (`OnValidatePrincipal`, reusing the allowlist lookup by admin `id`):
-  - admin not found, `session_version` different from the database, or the 90-day maximum exceeded → reject the principal and delete the cookie → `401`;
-  - admin inactive → `403`, the cookie is deleted and not renewed.
-- **Revocation (owner decision):** `admin_users.session_version` (integer). `POST /api/auth/logout` and `remove-admin` increment it, which **signs that admin out on every device** (acceptable for 2–3 admins) and makes a copied cookie useless.
+- **Validation on every request** (`OnValidatePrincipal`, reusing the allowlist lookup by admin `id`), in this order — the first match wins:
+  1. admin not found → `401`;
+  2. `session_version` different from the database → `401` (revoked by logout, `remove-admin` or `reset-google`);
+  3. more than 90 days since `issued_at` → `401`;
+  4. admin inactive (`is_active = false`) → `403`.
+  In every case the principal is rejected and the cookie deleted (not renewed). Because the CLI always increments `session_version` when it deactivates someone, an admin removed with `remove-admin` gets **401**; the **403** path covers an admin deactivated without a version change (e.g. a direct database update), which is how tests reach it.
+- **Revocation (owner decision):** `admin_users.session_version` (integer). `POST /api/auth/logout`, `remove-admin` and `reset-google` increment it, which **signs that admin out on every device** (acceptable for 2–3 admins) and makes a copied cookie useless.
 - API calls never redirect: `OnRedirectToLogin` → `401` ProblemDetails, `OnRedirectToAccessDenied` → `403` ProblemDetails, both without a `Location` header.
+- The OIDC handler's built-in sign-out endpoints are disabled (`RemoteSignOutPath` and `SignedOutCallbackPath` set to empty): there is no OIDC sign-out flow, and `GET /signout-oidc` would otherwise let any site delete the session cookie without the antiforgery check.
+- Every `/api/admin/*` response carries `Cache-Control: no-store` (set once on the route group), so private data (VIN, registration numbers, notes, pre-signed URLs) is not kept in browser or proxy caches.
 - **Display name:** `admin_users.display_name` if set, else the Google `name` claim from the session, else the email.
 
 ### Authorisation and error precedence
@@ -46,7 +51,7 @@ Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity 
 - `POST /api/auth/logout` is **not** rate limited.
 
 ### Proxy, hosts and CORS
-- **Forwarded headers** first in the pipeline: `XForwardedFor | XForwardedProto` (not `XForwardedHost`), `ForwardLimit = 1`, trusting only the Container Apps ingress (configured known networks/proxies). The rate-limit key is the resolved `RemoteIpAddress`. If Cloudflare ever proxies `api.<domain>`, the trusted client-IP source is revisited in F7-05.
+- **Forwarded headers** first in the pipeline: `XForwardedFor | XForwardedProto` (not `XForwardedHost`), `ForwardLimit = 1`. On the Consumption environment the ingress addresses are not known in advance and the container is reachable **only** through the ingress, so `KnownNetworks`/`KnownProxies` are cleared and `ForwardLimit = 1` takes only the hop the ingress appended (Microsoft's guidance for Container Apps); an optional configurable trusted CIDR can replace this if a custom VNet is added. Enabled only outside Development (and in tests that exercise it). The rate-limit key is the resolved `RemoteIpAddress`; behind the proxy the OIDC `redirect_uri` must be `https://`. If Cloudflare ever proxies `api.<domain>`, the trusted client-IP source is revisited in F7-05.
 - **`AllowedHosts`** = the API host in production (`*` only in Development). Container Apps probes use TCP so they are not rejected (see ADR-0003: `/health` wakes the database).
 - **CORS:** exactly the site origin (`https://www.<domain>` in production; `http://localhost:3000` in Development), with credentials and `Vary: Origin`. No wildcards, patterns, preview origins or `http:` origins outside Development.
 - Google redirect URIs registered exactly: `https://api.<domain>/api/auth/callback/google` and `http://localhost:5080/api/auth/callback/google`.
@@ -56,7 +61,7 @@ Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity 
 - `SetApplicationName("SilvaStock")`. One key ring per environment: production keys are never copied into development or preview databases.
 
 ### Management and logging
-- CLI: `add-admin <email> [--name]`, `remove-admin <email>` (deactivates and increments `session_version`), `list-admins` (shows `last_login_at`). A management screen is outside the MVP.
+- CLI: `add-admin <email> [--name]`, `remove-admin <email>` (deactivates and increments `session_version`), `reset-google <email>` (clears `google_sub` so a different Google account can be bound on the next login, and increments `session_version`, so sessions of the old account end), `list-admins` (shows `last_login_at` and whether a Google account is bound). A management screen is outside the MVP.
 - Failed logins log the outcome and error code only, never the full email, tokens or cookie values (at most the email domain).
 - **Local development:** the API runs on `http://localhost:5080`; `Secure`/`__Host-` cookies over `http://localhost` work in Chromium-based browsers and Firefox (not Safari). Integration tests use `https://localhost` as the client base address.
 
@@ -65,7 +70,7 @@ Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity 
 - + Recovery if everyone is locked out: run `add-admin` with another Google account.
 - + Sessions survive deployments and scale-to-zero thanks to persisted Data Protection keys.
 - + Logout and `remove-admin` revoke sessions server-side on all devices; the 90-day cap bounds a stolen cookie's lifetime.
-- − Every admin needs a Google account; dependency on an external provider. Changing an admin's Google account requires clearing `google_sub` (CLI, in F2-05).
+- − Every admin needs a Google account; dependency on an external provider. Changing an admin's Google account requires `reset-google` (CLI, F2-05).
 - − Requires a Google Cloud project with an OAuth consent screen (free); redirect URIs for localhost and the production domain.
 - − API on a different host from the site → requires the same registrable domain (ADR-0002).
 - − Logging out on one device logs that admin out everywhere.
@@ -73,7 +78,7 @@ Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity 
 - − Any XSS on the site could read `csrfToken` and act as the admin; a strict Content-Security-Policy is tracked as a Phase 5 task.
 
 ## Amendments
-**2026-11-15 — F2-01 (Phase 2 contract closed with the owner, after two review rounds)**
+**2026-11-15 — F2-01 (Phase 2 contract closed with the owner, after three review rounds)**
 | Topic | Before | Now | Why |
 |---|---|---|---|
 | Session lifetime | Proposal: 8 h sliding, max 7 days | 30 days sliding (renewed after half the window), absolute max 90 days | Owner decisions |

@@ -38,7 +38,7 @@ Modular monolith. No microservices. No features outside the MVP without justific
 ## 5. Authentication
 - **Google (OIDC)** login + cookie session (`HttpOnly`, `Secure`, `SameSite=Lax`) + antiforgery. No JWT in localStorage.
 - **Allowlist**: `admin_users` table (email). If the Google-verified email is not in the table → reject without creating a session.
-- User management via CLI commands (`add-admin`, `remove-admin`). A management screen comes later.
+- User management via CLI commands (`add-admin`, `remove-admin`, `reset-google`, `list-admins`). A management screen comes later.
 - Check `email_verified`. Rate limiting on login.
 - Every `/api/admin/*` endpoint requires authorisation; tests prove 401/403 without a valid session.
 - **Confirmed by the owner (2026-11-14):** Google (OIDC) login. No email + password (no ASP.NET Identity).
