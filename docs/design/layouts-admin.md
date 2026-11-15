@@ -43,7 +43,8 @@ Admin URL query params: inventory `?q=&estado=rascunho|publicada|vendida&ordem=&
 - Button: use **Google's official "Sign in with Google" button asset/branding** (light theme, "Entrar com Google" label, Google "G" logo, 52px tall here, full width, radius `md`, 1px `border.strong`). It is a plain link to `GET /api/auth/login/google?returnUrl=/admin/...` (full-page navigation, not fetch).
 - States (Alert above the button, full width):
   - `?error=not_allowed` → Danger "Não foi possível entrar." + generic text (never says whether the email exists).
-  - 429 → Warning "Demasiadas tentativas."
+  - `?error=rate_limited` → Warning "Demasiadas tentativas." (the API redirects here instead of answering 429)
+  - `?error=login_failed` → Danger "Não foi possível entrar." + "try again" text (login cancelled at Google or failed)
   - Session expired (redirect with `?sessao=expirada`) → Info "A sua sessão terminou."
 - Mobile: card width `100% − 32`, same content; vertically centred with min top padding 24.
 - If `/api/admin/me` already returns 200, redirect to `/admin` immediately.

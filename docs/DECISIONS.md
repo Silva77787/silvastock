@@ -42,9 +42,11 @@ Modular monolith. No microservices. No features outside the MVP without justific
 - Check `email_verified`. Rate limiting on login.
 - Every `/api/admin/*` endpoint requires authorisation; tests prove 401/403 without a valid session.
 - **Confirmed by the owner (2026-11-14):** Google (OIDC) login. No email + password (no ASP.NET Identity).
+- **Phase 2 contract closed with the owner (2026-11-15, F2-01):** session cookie lasts **30 days, sliding**; the antiforgery token is returned by `GET /api/admin/me` (`csrfToken`) and sent as `X-XSRF-TOKEN`; login errors redirect to `/admin/login?error=not_allowed|rate_limited|login_failed`; Data Protection keys persisted in Postgres; `AllowedHosts` restricted in production; display name falls back to the Google account name. Details: ADR-0004 and `openapi.yaml`.
 
 ## 6. Data model (PostgreSQL)
-- `admin_users`: id, email (unique), display_name, is_active, created_at.
+- `admin_users`: id, email (unique, stored lower-case), display_name, is_active, created_at, last_login_at (added in F2-01).
+- `data_protection_keys`: id, friendly_name, xml — ASP.NET Data Protection key ring (added in F2-01; ADR-0004).
 - `vehicles`: **id bigint identity (PK)**, status (Draft|Published|Sold, CHECK), published_at, sold_at,
   make, model, version, year, mileage_km, price (decimal 10,2), price_on_request, fuel, transmission,
   engine_cc, power_kw, body_type, color (exterior), interior_color, doors, seats, drivetrain, emissions, description,

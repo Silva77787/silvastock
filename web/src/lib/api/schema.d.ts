@@ -187,11 +187,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Starts the Google (OIDC) login */
+        /**
+         * Starts the Google (OIDC) login
+         * @description Opened by full-page navigation (a plain link), never by `fetch`.
+         *     `returnUrl` must be a relative path starting with `/admin` (no scheme, host, `//`, `\`
+         *     or `..` segments); anything else is replaced by `/admin`. It is carried through the
+         *     OIDC round trip and used only after a successful login.
+         *     Rate limited per client IP; when exceeded it redirects to `{site}/admin/login?error=rate_limited`
+         *     instead of returning 429.
+         */
         get: {
             parameters: {
                 query?: {
-                    /** @description Relative path inside `/admin` (validated; absolute URLs are ignored). */
+                    /** @description Relative path inside `/admin`; invalid values fall back to `/admin`. */
                     returnUrl?: string;
                 };
                 header?: never;
@@ -200,14 +208,17 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Redirects to Google. */
+                /**
+                 * @description Redirects to Google's authorization endpoint, or to `{site}/admin/login?error=rate_limited`
+                 *     when the rate limit is exceeded.
+                 */
                 302: {
                     headers: {
+                        Location?: string;
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -227,10 +238,16 @@ export interface paths {
         };
         /**
          * Google OIDC callback (handled by the authentication middleware)
-         * @description Validates the `id_token`, requires `email_verified = true` and an active record in `admin_users`.
-         *     Success → creates the session cookie and redirects to `returnUrl`.
-         *     Failure → does **not** create a session and redirects to `/admin/login?error=not_allowed`
-         *     (generic message, without revealing whether the email exists).
+         * @description Validates the OIDC response (state, nonce, `id_token`) and requires `email_verified = true`
+         *     and an active row in `admin_users` (email compared case-insensitively).
+         *     - Success → issues the session cookie, updates `admin_users.last_login_at` and redirects to
+         *       `{site}{returnUrl}`.
+         *     - Email not verified, not on the allowlist or inactive → **no** session; redirects to
+         *       `{site}/admin/login?error=not_allowed` (generic message, never reveals whether the email exists).
+         *     - Cancelled at Google, invalid/expired state or any other OIDC error → **no** session;
+         *       redirects to `{site}/admin/login?error=login_failed`.
+         *     - Rate limit exceeded → redirects to `{site}/admin/login?error=rate_limited`.
+         *     `{site}` is the configured site base URL (e.g. `http://localhost:3000` locally).
          */
         get: {
             parameters: {
@@ -241,14 +258,14 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Redirects to the site (success or error). */
+                /** @description Redirects to the site (success or one of the error codes above). */
                 302: {
                     headers: {
+                        Location?: string;
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -268,12 +285,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ends the session */
+        /**
+         * Ends the session
+         * @description Called with `fetch` (credentials included). The site then navigates to `/admin/login`.
+         */
         post: {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path?: never;
@@ -281,13 +301,14 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Session ended; cookie removed. */
+                /** @description Session ended; the session cookie is deleted (expired `Set-Cookie`). */
                 204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
+                400: components["responses"]["AntiforgeryFailed"];
                 401: components["responses"]["Unauthorized"];
             };
         };
@@ -305,8 +326,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Current session user
-         * @description Also issues/renews the `XSRF-TOKEN` cookie used by state-changing requests.
+         * Current session user and antiforgery token
+         * @description Used by the back office on load (auth guard). Returns the signed-in admin and a fresh
+         *     antiforgery token (`csrfToken`) to send as `X-XSRF-TOKEN` on state-changing requests.
+         *     Responses carry `Cache-Control: no-store`.
          */
         get: {
             parameters: {
@@ -420,7 +443,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path?: never;
@@ -499,7 +522,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -538,7 +561,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -584,7 +607,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -630,7 +653,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -678,7 +701,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -723,7 +746,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -774,7 +797,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -834,7 +857,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -880,7 +903,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -939,7 +962,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -1012,7 +1035,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -1124,7 +1147,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header: {
-                    /** @description Value of the `XSRF-TOKEN` cookie. */
+                    /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
                     "X-XSRF-TOKEN": components["parameters"]["XsrfHeader"];
                 };
                 path: {
@@ -1357,10 +1380,23 @@ export interface components {
             uploadedAt: string;
             uploadedBy: string;
         };
+        /**
+         * @example {
+         *       "email": "admin@example.test",
+         *       "displayName": "Admin Exemplo",
+         *       "csrfToken": "CfDJ8N…"
+         *     }
+         */
         AdminMe: {
-            /** Format: email */
+            /**
+             * Format: email
+             * @description Lower-case email from `admin_users`.
+             */
             email: string;
+            /** @description `admin_users.display_name` if set; otherwise the Google account name; otherwise the email. */
             displayName: string;
+            /** @description Antiforgery token to send as `X-XSRF-TOKEN`. Keep it in memory only. */
+            csrfToken: string;
         };
         Dashboard: {
             total: number;
@@ -1379,8 +1415,17 @@ export interface components {
                 "application/problem+json": components["schemas"]["ValidationProblemDetails"];
             };
         };
-        /** @description No valid session. */
+        /** @description No valid session (missing, expired or invalid cookie). API calls never redirect to Google. */
         Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
+        /** @description Missing or invalid `X-XSRF-TOKEN` on a state-changing request. */
+        AntiforgeryFailed: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1486,7 +1531,7 @@ export interface components {
         DocumentId: number;
         Page: number;
         PageSize: number;
-        /** @description Value of the `XSRF-TOKEN` cookie. */
+        /** @description The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token). */
         XsrfHeader: string;
     };
     requestBodies: never;
