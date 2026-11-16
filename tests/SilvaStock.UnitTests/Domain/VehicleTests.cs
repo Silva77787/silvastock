@@ -32,6 +32,19 @@ public class VehicleTests
         Assert.Throws<ArgumentException>(() => new Vehicle(make, model, _admin, _createdAt));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void MakeAndModelCannotBeSetToBlank(string value)
+    {
+        var vehicle = new Vehicle("BMW", "320d", _admin, _createdAt);
+
+        Assert.Throws<ArgumentException>(() => vehicle.Make = value);
+        Assert.Throws<ArgumentException>(() => vehicle.Model = value);
+        Assert.Equal("BMW", vehicle.Make);
+        Assert.Equal("320d", vehicle.Model);
+    }
+
     [Fact]
     public void MarkUpdatedRecordsActorAndUtcTime()
     {

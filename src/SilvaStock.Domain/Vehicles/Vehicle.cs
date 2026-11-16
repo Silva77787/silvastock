@@ -50,9 +50,27 @@ public sealed class Vehicle
 
     public DateTimeOffset? SoldAt { get; private set; }
 
-    public string Make { get; set; }
+    /// <summary>Required; never blank.</summary>
+    public string Make
+    {
+        get;
+        set
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(value);
+            field = value;
+        }
+    }
 
-    public string Model { get; set; }
+    /// <summary>Required; never blank.</summary>
+    public string Model
+    {
+        get;
+        set
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(value);
+            field = value;
+        }
+    }
 
     public string? Version { get; set; }
 
