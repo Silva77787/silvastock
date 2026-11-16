@@ -18,6 +18,9 @@ public interface IAdminUserManagementStore
     /// <summary>Stages a new administrator.</summary>
     void Add(AdminUser adminUser);
 
-    /// <summary>Persists the staged changes and commits the unit of work.</summary>
+    /// <summary>
+    /// Persists the staged changes and commits the unit of work. Throws <see cref="AdminEmailAlreadyExistsException"/>
+    /// (after rolling back and discarding the staged changes) when a concurrent insert took the same email.
+    /// </summary>
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

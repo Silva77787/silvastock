@@ -80,7 +80,86 @@ public sealed class CliApplicationTests : IDisposable
         var all = _error.ToString() + _output.ToString();
         Assert.Contains("Database error", all, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-test-only-value", all, StringComparison.Ordinal);
-        Assert.DoesNotContain("127.0.0.1", all, StringComparison.Ordinal);
+        Assert.DoesNotContain("Password", all, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("nobody", all, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EveryDatabaseCommandNamesTheTargetAndSourceButNeverTheCredentials()
+    {
+        var exitCode = await RunAsync(["remove-admin", "maria@example.test"], _unreachableConnectionString);
+
+        Assert.Equal(3, exitCode);
+        var error = _error.ToString();
+        Assert.StartsWith(
+            "Target database: Host=127.0.0.1, Port=1, Database=silvastock_unreachable (source: in-memory)",
+            error,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-test-only-value", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("nobody", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SourceIsUserSecretsWhenTheEnvironmentVariableIsMissing()
+    {
+        var prefix = UniqueEnvironmentPrefix();
+        var userSecrets = WriteUserSecretsFile("Host=db.example.test;Database=local;Password=secret-test-only-value");
+        try
+        {
+            // Same order as Program: user-secrets, then environment (wins).
+            var configuration = new ConfigurationBuilder()
+                .AddJsonFile(userSecrets, optional: false)
+                .AddEnvironmentVariables(prefix)
+                .Build();
+
+            var target = CliApplication.DescribeTarget(configuration["ConnectionStrings:Default"]!, configuration);
+
+            Assert.Equal("Target database: Host=db.example.test, Port=5432, Database=local (source: user-secrets)", target);
+        }
+        finally
+        {
+            File.Delete(userSecrets);
+        }
+    }
+
+    [Fact]
+    public void SourceIsTheEnvironmentVariableWhenSetEvenWithUserSecrets()
+    {
+        var prefix = UniqueEnvironmentPrefix();
+        var userSecrets = WriteUserSecretsFile("Host=localhost;Database=local");
+        Environment.SetEnvironmentVariable(
+            prefix + "ConnectionStrings__Default",
+            "Host=prod.example.test;Port=5433;Database=silvastock;Username=owner;Password=secret-test-only-value");
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddJsonFile(userSecrets, optional: false)
+                .AddEnvironmentVariables(prefix)
+                .Build();
+
+            var target = CliApplication.DescribeTarget(configuration["ConnectionStrings:Default"]!, configuration);
+
+            Assert.Equal(
+                "Target database: Host=prod.example.test, Port=5433, Database=silvastock " +
+                "(source: environment variable ConnectionStrings__Default)",
+                target);
+            Assert.DoesNotContain("owner", target, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-test-only-value", target, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(prefix + "ConnectionStrings__Default", null);
+            File.Delete(userSecrets);
+        }
+    }
+
+    private static string UniqueEnvironmentPrefix() => $"SILVASTOCK_CLI_TEST_{Guid.NewGuid():N}_";
+
+    private static string WriteUserSecretsFile(string connectionString)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"silvastock-cli-test-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, $$"""{ "ConnectionStrings": { "Default": "{{connectionString}}" } }""");
+        return path;
     }
 
     private Task<int> RunAsync(string[] args, string? connectionString)

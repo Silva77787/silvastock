@@ -225,6 +225,35 @@ public sealed class AdminCliTests(PostgresFixture postgres) : IAsyncLifetime, ID
     }
 
     [Fact]
+    public async Task ConcurrentAddOfTheSameNewEmailSucceedsForEveryRunWithOneRow()
+    {
+        // No row exists yet, so FOR UPDATE locks nothing: the losers hit the unique index and must still exit 0.
+        for (var round = 0; round < 5; round++)
+        {
+            await postgres.ResetDatabaseAsync();
+
+            var exitCodes = await Task.WhenAll(Enumerable.Range(0, 6)
+                .Select(_ => RunWithOwnWritersAsync("add-admin", _maria, "--name", "Maria")));
+
+            Assert.All(exitCodes, code => Assert.Equal(0, code));
+            var admin = await SingleAdminAsync();
+            Assert.True(admin.IsActive);
+            Assert.Equal("Maria", admin.DisplayName);
+            Assert.Equal(0, admin.SessionVersion);
+        }
+    }
+
+    [Fact]
+    public async Task TheTargetDatabaseIsNamedOnStandardError()
+    {
+        Assert.Equal(0, await RunAsync("list-admins"));
+
+        var database = new NpgsqlConnectionStringBuilder(postgres.ConnectionString).Database;
+        Assert.Contains($"Database={database} (source: in-memory)", _error.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("silvastock-test-only", _error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheCliNeverAppliesMigrations()
     {
         var database = "cli_unmigrated_" + Guid.NewGuid().ToString("N");

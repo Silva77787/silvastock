@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 using SilvaStock.Application.AdminUsers.Management;
 using SilvaStock.Domain.AdminUsers;
 using SilvaStock.Infrastructure.Persistence;
@@ -13,6 +14,9 @@ namespace SilvaStock.Infrastructure.AdminUsers;
 internal sealed class AdminUserManagementStore(SilvaStockDbContext dbContext)
     : IAdminUserManagementStore, IAsyncDisposable
 {
+    /// <summary>Unique index on <c>admin_users.email</c> (InitialCreate migration).</summary>
+    private const string _emailUniqueIndex = "ix_admin_users_email";
+
     private IDbContextTransaction? _transaction;
 
     public async Task<IReadOnlyList<AdminUser>> ListAsync(CancellationToken cancellationToken)
@@ -43,7 +47,27 @@ internal sealed class AdminUserManagementStore(SilvaStockDbContext dbContext)
 
     public async Task SaveChangesAsync(CancellationToken cancellationToken)
     {
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: _emailUniqueIndex,
+        })
+        {
+            // The failed statement aborted the transaction: roll back and forget the staged insert so the
+            // caller can look the row up again in a fresh unit of work.
+            if (_transaction is not null)
+            {
+                await _transaction.DisposeAsync();
+                _transaction = null;
+            }
+
+            dbContext.ChangeTracker.Clear();
+            throw new AdminEmailAlreadyExistsException("An administrator with this email already exists.", ex);
+        }
 
         if (_transaction is not null)
         {

@@ -28,11 +28,26 @@ public sealed class AdminUserManagementService(IAdminUserManagementStore store, 
         var existing = await store.FindByEmailForUpdateAsync(normalized, cancellationToken);
         if (existing is null)
         {
-            store.Add(new AdminUser(normalized, displayName, timeProvider.GetUtcNow()));
-            await store.SaveChangesAsync(cancellationToken);
-            return new(AddAdminOutcome.Created, normalized);
+            try
+            {
+                store.Add(new AdminUser(normalized, displayName, timeProvider.GetUtcNow()));
+                await store.SaveChangesAsync(cancellationToken);
+                return new(AddAdminOutcome.Created, normalized);
+            }
+            catch (AdminEmailAlreadyExistsException)
+            {
+                // A concurrent add-admin inserted the same email first: continue as for an existing admin.
+                existing = await store.FindByEmailForUpdateAsync(normalized, cancellationToken)
+                    ?? throw new InvalidOperationException("The administrator inserted concurrently was not found.");
+            }
         }
 
+        return await UpdateExistingAsync(existing, normalized, displayName, cancellationToken);
+    }
+
+    private async Task<AdminCommandResult<AddAdminOutcome>> UpdateExistingAsync(
+        AdminUser existing, string normalized, string? displayName, CancellationToken cancellationToken)
+    {
         var outcome = AddAdminOutcome.AlreadyActive;
         if (!existing.IsActive)
         {

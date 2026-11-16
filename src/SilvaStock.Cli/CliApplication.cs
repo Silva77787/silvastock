@@ -1,5 +1,8 @@
 using System.Globalization;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
+using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -55,10 +58,11 @@ internal static class CliApplication
             ValidateOnBuild = true,
         });
 
+        DatabaseOptions databaseOptions;
         try
         {
             // Validates the connection string; the messages never include its value.
-            _ = provider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
+            databaseOptions = provider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
         }
         catch (OptionsValidationException ex)
         {
@@ -69,6 +73,10 @@ internal static class CliApplication
 
             return ExitCodes.Failure;
         }
+
+        // Always say which database is targeted and where the setting came from, so a missing environment
+        // variable silently falling back to user-secrets (local database) is visible. Never username or password.
+        await error.WriteLineAsync(DescribeTarget(databaseOptions.ConnectionString, configuration));
 
         await using var scope = provider.CreateAsyncScope();
         var management = scope.ServiceProvider.GetRequiredService<AdminUserManagementService>();
@@ -212,6 +220,35 @@ internal static class CliApplication
         }
 
         return ExitCodes.Success;
+    }
+
+    /// <summary>"Target database: Host=…, Port=…, Database=… (source: …)". Only these three keys are ever read.</summary>
+    internal static string DescribeTarget(string connectionString, IConfiguration configuration)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"Target database: Host={builder.Host}, Port={builder.Port}, Database={builder.Database ?? "(default)"} " +
+            $"(source: {DescribeSource(configuration)})");
+    }
+
+    /// <summary>Name of the configuration source that supplied the connection string (the last one that has it wins).</summary>
+    internal static string DescribeSource(IConfiguration configuration)
+    {
+        if (configuration is not IConfigurationRoot root)
+        {
+            return "configuration";
+        }
+
+        var provider = root.Providers.LastOrDefault(p => p.TryGet(DatabaseOptions.ConnectionStringKey, out _));
+        return provider switch
+        {
+            EnvironmentVariablesConfigurationProvider => "environment variable ConnectionStrings__Default",
+            JsonConfigurationProvider => "user-secrets",
+            MemoryConfigurationProvider => "in-memory",
+            null => "none",
+            _ => provider.GetType().Name,
+        };
     }
 
     private static string FormatRow(string[] cells, int[] widths)
