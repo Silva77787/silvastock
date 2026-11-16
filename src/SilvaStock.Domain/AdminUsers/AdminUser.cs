@@ -40,6 +40,34 @@ public sealed class AdminUser
     /// <summary>Google <c>sub</c> bound on first login; unique when set.</summary>
     public string? GoogleSub { get; private set; }
 
+    /// <summary>True when a Google account is bound and its <c>sub</c> is exactly <paramref name="googleSub"/>.</summary>
+    public bool IsBoundTo(string googleSub)
+        => GoogleSub is not null && string.Equals(GoogleSub, googleSub, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Binds the Google account (<c>sub</c>) on the first login (ADR-0004). Binding the same account again is a
+    /// no-op; a different account can only be bound after the binding is reset (CLI <c>reset-google</c>).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Another Google account is already bound.</exception>
+    public void BindGoogleAccount(string googleSub)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(googleSub);
+
+        if (GoogleSub is null)
+        {
+            GoogleSub = googleSub;
+            return;
+        }
+
+        if (!IsBoundTo(googleSub))
+        {
+            throw new InvalidOperationException("A different Google account is already bound to this administrator.");
+        }
+    }
+
+    /// <summary>Records a successful login (stored in UTC).</summary>
+    public void RecordLogin(DateTimeOffset at) => LastLoginAt = at.ToUniversalTime();
+
     /// <summary>Normalises an email for storage and lookup: trimmed, lower case (invariant culture).</summary>
     public static string NormalizeEmail(string email)
     {
