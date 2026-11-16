@@ -17,20 +17,24 @@ namespace SilvaStock.IntegrationTests.Auth;
 /// <summary>
 /// API host whose Google scheme talks to <see cref="FakeOidcIssuer"/> (authority + backchannel only; every other OIDC
 /// setting is the product's). Adds test-only probes after the product pipeline: <see cref="SessionProbePath"/> echoes
-/// the session claims (or challenges) and <see cref="ForbidProbePath"/> forbids. Captures every log message.
+/// the session claims (or challenges) and <see cref="ForbidProbePath"/> forbids. Captures every log message that the
+/// configured log filters let through.
 /// </summary>
 public sealed class GoogleLoginApiFactory : SilvaStockApiFactory
 {
     public const string SessionProbePath = "/__tests/session";
     public const string ForbidProbePath = "/__tests/forbid";
 
-    public GoogleLoginApiFactory(string connectionString)
-        : base(connectionString)
+    public GoogleLoginApiFactory(string connectionString, string environment = TestingEnvironment)
+        : base(connectionString, environment)
     {
         Issuer = new FakeOidcIssuer(TestGoogleClientId, TestGoogleClientSecret);
     }
 
     public FakeOidcIssuer Issuer { get; }
+
+    /// <summary>Optional test-only service overrides, applied after the product registrations.</summary>
+    public Action<IServiceCollection>? ExtraServices { get; init; }
 
     /// <summary>Every formatted log message written by the API (all categories).</summary>
     public ConcurrentQueue<string> Logs { get; } = new();
@@ -49,8 +53,7 @@ public sealed class GoogleLoginApiFactory : SilvaStockApiFactory
 
         builder.ConfigureLogging(logging =>
         {
-            // Provider-specific rule: captures Information and above from every category, whatever appsettings says.
-            logging.AddFilter<CapturingLoggerProvider>(category: null, LogLevel.Information);
+            // No provider-specific rule: the capture sees exactly what the environment's appsettings filters let through.
             logging.AddProvider(new CapturingLoggerProvider(Logs));
         });
 
@@ -62,6 +65,7 @@ public sealed class GoogleLoginApiFactory : SilvaStockApiFactory
                 options.BackchannelHttpHandler = Issuer.CreateHandler();
             });
             services.AddTransient<IStartupFilter, ProbeStartupFilter>();
+            ExtraServices?.Invoke(services);
         });
     }
 

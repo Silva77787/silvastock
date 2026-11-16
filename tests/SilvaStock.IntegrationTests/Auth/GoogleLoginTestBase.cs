@@ -44,6 +44,15 @@ public abstract class GoogleLoginTestBase(PostgresFixture postgres) : IAsyncLife
         await Factory.DisposeAsync();
     }
 
+    /// <summary>Replaces the default host (Testing, test database) for tests that need another environment or database.</summary>
+    protected async Task UseFactoryAsync(string connectionString, string environment)
+    {
+        Client.Dispose();
+        await Factory.DisposeAsync();
+        Factory = new GoogleLoginApiFactory(connectionString, environment);
+        Client = Factory.CreateBrowserClient();
+    }
+
     /// <summary>Adds an administrator; optionally already bound to a Google account and/or inactive.</summary>
     protected async Task<long> SeedAdminAsync(string email = AdminEmail, string? googleSub = null, bool isActive = true)
     {

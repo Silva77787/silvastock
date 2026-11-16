@@ -47,6 +47,9 @@ public sealed class FakeOidcIssuer : IDisposable
     /// <summary>Number of successful token endpoint calls (code redemptions).</summary>
     public int RedeemedCodes => _redeemed;
 
+    /// <summary>When true the discovery document answers 503 (provider unavailable).</summary>
+    public bool MetadataUnavailable { get; set; }
+
     private int _redeemed;
 
     /// <summary>Creates the backchannel handler that serves discovery, JWKS and the token endpoint.</summary>
@@ -101,9 +104,9 @@ public sealed class FakeOidcIssuer : IDisposable
         {
             Issuer = token.Issuer ?? Issuer,
             Audience = token.Audience ?? ClientId,
-            IssuedAt = now,
-            NotBefore = now,
-            Expires = now.AddMinutes(5),
+            IssuedAt = (token.ExpiresAt ?? now.AddMinutes(5)).AddMinutes(-5),
+            NotBefore = (token.ExpiresAt ?? now.AddMinutes(5)).AddMinutes(-5),
+            Expires = token.ExpiresAt ?? now.AddMinutes(5),
             Claims = claims,
             SigningCredentials = new SigningCredentials(
                 token.SignWithUnknownKey ? UnknownKey : SigningKey,
@@ -200,6 +203,11 @@ public sealed class FakeOidcIssuer : IDisposable
 
             if (request.Method == HttpMethod.Get && url == MetadataAddress)
             {
+                if (issuer.MetadataUnavailable)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+                }
+
                 return Json(Discovery());
             }
 
@@ -245,6 +253,9 @@ public sealed record FakeIdToken(string Subject, string? Email)
 
     /// <summary>Signs with a key that is not in the JWKS.</summary>
     public bool SignWithUnknownKey { get; init; }
+
+    /// <summary>Overrides the <c>exp</c> claim (default: 5 minutes from now); <c>iat</c>/<c>nbf</c> are 5 minutes earlier.</summary>
+    public DateTime? ExpiresAt { get; init; }
 }
 
 /// <summary>The authorization request the API redirected the browser to (parsed from the <c>Location</c> header).</summary>

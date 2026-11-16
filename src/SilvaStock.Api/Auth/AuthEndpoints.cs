@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authentication;
 using SilvaStock.Infrastructure.Authentication;
 
 namespace SilvaStock.Api.Auth;
@@ -11,19 +10,12 @@ internal static class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet(AdminAuthenticationDefaults.LoginPath, StartGoogleLogin)
+        app.MapGet(
+                AdminAuthenticationDefaults.LoginPath,
+                (string? returnUrl, HttpContext httpContext, GoogleLoginStarter starter) => starter.StartAsync(httpContext, returnUrl))
             .AllowAnonymous()
             .WithTags("Auth");
 
         return app;
     }
-
-    /// <summary>
-    /// Challenges the Google scheme explicitly. The sanitised <c>{site}{returnUrl}</c> travels only inside the
-    /// protected OIDC state and is used only after a successful login.
-    /// </summary>
-    private static IResult StartGoogleLogin(string? returnUrl, LoginRedirects redirects)
-        => Results.Challenge(
-            new AuthenticationProperties { RedirectUri = redirects.ReturnTarget(returnUrl) },
-            [AdminAuthenticationDefaults.GoogleScheme]);
 }

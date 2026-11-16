@@ -35,6 +35,7 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<IAdminLoginStore, AdminLoginStore>();
         services.AddScoped<GoogleSignInService>();
         services.AddSingleton<LoginRedirects>();
+        services.AddSingleton<GoogleLoginStarter>();
         services.AddScoped<GoogleOidcEvents>();
         services.AddSingleton<SessionCookieEvents>();
 

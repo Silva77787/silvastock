@@ -35,10 +35,11 @@ internal sealed partial class GoogleOidcEvents(
         {
             result = await signInService.SignInAsync(identity, context.HttpContext.RequestAborted);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception) when (!context.HttpContext.RequestAborted.IsCancellationRequested)
         {
-            // E.g. database unavailable or a concurrent google_sub binding. Exceptions here are not routed to
-            // OnRemoteFailure by the handler, so they are mapped to login_failed explicitly (type name only).
+            // E.g. database unavailable or timing out, or a concurrent google_sub binding. Exceptions here are not
+            // routed to OnRemoteFailure by the handler, so they are mapped to login_failed explicitly (type name
+            // only). Only a cancellation caused by the client aborting the request is allowed to propagate.
             LogLoginFailed(logger, LoginErrorCodes.LoginFailed, exception.GetType().Name);
             Redirect(context, LoginErrorCodes.LoginFailed);
             return;
