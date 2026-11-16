@@ -2,5 +2,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SilvaStock.Domain\SilvaStock.Domain.csproj" />
     <ProjectReference Include="..\..\src\SilvaStock.Application\SilvaStock.Application.csproj" />
+    <ProjectReference Include="..\..\src\SilvaStock.Cli\SilvaStock.Cli.csproj" />
   </ItemGroup>
 </Project>

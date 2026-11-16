@@ -5,5 +5,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SilvaStock.Api\SilvaStock.Api.csproj" />
+    <ProjectReference Include="..\..\src\SilvaStock.Cli\SilvaStock.Cli.csproj" />
   </ItemGroup>
 </Project>
