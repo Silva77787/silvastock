@@ -14,7 +14,10 @@ public static class DependencyInjection
     /// <summary>Health-check tag for checks that depend on the database.</summary>
     public const string DatabaseTag = "database";
 
-    /// <summary>Registers database options (validated at startup) and the shared <see cref="NpgsqlDataSource"/>.</summary>
+    /// <summary>
+    /// Registers database options (validated at startup), the shared <see cref="NpgsqlDataSource"/> and
+    /// <see cref="SilvaStockDbContext"/>.
+    /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -27,6 +30,10 @@ public static class DependencyInjection
         // Built lazily on first use; options are validated at startup, before any request.
         services.AddSingleton(sp =>
             NpgsqlDataSource.Create(sp.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
+
+        // Shares the validated data source above; migrations are never applied here (explicit deploy step).
+        services.AddDbContext<SilvaStockDbContext>((sp, options) =>
+            SilvaStockDbContext.Configure(options, sp.GetRequiredService<NpgsqlDataSource>()));
 
         return services;
     }
