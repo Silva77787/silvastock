@@ -40,6 +40,38 @@ public sealed class AdminUser
     /// <summary>Google <c>sub</c> bound on first login; unique when set.</summary>
     public string? GoogleSub { get; private set; }
 
+    // ---- Allowlist management (CLI, F2-05) ----
+
+    /// <summary>
+    /// Removes the administrator from the allowlist (the row is kept) and revokes every session,
+    /// so an existing cookie is rejected on its next request (ADR-0004).
+    /// </summary>
+    public void Deactivate()
+    {
+        IsActive = false;
+        RevokeSessions();
+    }
+
+    /// <summary>Puts a deactivated administrator back on the allowlist. Sessions revoked earlier stay revoked.</summary>
+    public void Reactivate() => IsActive = true;
+
+    /// <summary>Signs the administrator out on every device by incrementing <see cref="SessionVersion"/>.</summary>
+    public void RevokeSessions() => SessionVersion = checked(SessionVersion + 1);
+
+    /// <summary>
+    /// Unbinds the Google account so a different one can be bound on the next login, and revokes every
+    /// session (including those of the old account).
+    /// </summary>
+    public void ResetGoogleAccount()
+    {
+        GoogleSub = null;
+        RevokeSessions();
+    }
+
+    /// <summary>Sets the display name, normalised like in the constructor (trimmed; blank becomes null).</summary>
+    public void ChangeDisplayName(string? displayName)
+        => DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
+
     /// <summary>Normalises an email for storage and lookup: trimmed, lower case (invariant culture).</summary>
     public static string NormalizeEmail(string email)
     {

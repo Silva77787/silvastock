@@ -7,4 +7,8 @@
     <ProjectReference Include="..\SilvaStock.Application\SilvaStock.Application.csproj" />
     <ProjectReference Include="..\SilvaStock.Infrastructure\SilvaStock.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SilvaStock.UnitTests" />
+    <InternalsVisibleTo Include="SilvaStock.IntegrationTests" />
+  </ItemGroup>
 </Project>

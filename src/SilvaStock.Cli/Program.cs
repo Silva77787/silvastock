@@ -1,5 +1,36 @@
-using System.Globalization;
+using Microsoft.Extensions.Configuration;
 
-// Admin management commands (add-admin, remove-admin, list-admins) are implemented in F2-05.
-await Console.Error.WriteLineAsync(string.Create(CultureInfo.InvariantCulture, $"Usage: silvastock <command> [options]{Environment.NewLine}No commands are available yet."));
-return args.Length == 0 ? 0 : 1;
+namespace SilvaStock.Cli;
+
+/// <summary>
+/// Entry point. Allowlist management (DECISIONS section 5, ADR-0004): add-admin, remove-admin, reset-google,
+/// list-admins. Not top-level statements, so this <c>Program</c> never clashes with the API's in the test projects.
+/// </summary>
+internal static class Program
+{
+    public static async Task<int> Main(string[] args)
+    {
+        // ConnectionStrings__Default (environment, wins) or user-secrets; never an argument.
+        var configuration = new ConfigurationBuilder()
+            .AddUserSecrets(CliApplication.UserSecretsId)
+            .AddEnvironmentVariables()
+            .Build();
+
+        using var cancellation = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cancellation.Cancel();
+        };
+
+        try
+        {
+            return await CliApplication.RunAsync(args, configuration, Console.Out, Console.Error, cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            await Console.Error.WriteLineAsync("Cancelled. No changes were saved.");
+            return ExitCodes.Failure;
+        }
+    }
+}
