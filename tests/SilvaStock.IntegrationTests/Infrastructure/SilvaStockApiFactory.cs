@@ -22,6 +22,21 @@ public class SilvaStockApiFactory(string connectionString, string environment = 
     /// <summary>Fictitious site origin used by tests (reserved <c>.test</c> TLD).</summary>
     public const string TestSiteOrigin = "https://www.silvastock.test";
 
+    /// <summary>Required at startup by the API's site options validation (login redirects).</summary>
+    public const string SiteBaseUrlKey = "Site:BaseUrl";
+
+    /// <summary>Required at startup by the Google OAuth client options validation.</summary>
+    public const string GoogleClientIdKey = "Authentication:Google:ClientId";
+
+    /// <inheritdoc cref="GoogleClientIdKey"/>
+    public const string GoogleClientSecretKey = "Authentication:Google:ClientSecret";
+
+    /// <summary>Fictitious Google OAuth client (never a real client).</summary>
+    public const string TestGoogleClientId = "silvastock-test-client.apps.example.test";
+
+    /// <inheritdoc cref="TestGoogleClientId"/>
+    public const string TestGoogleClientSecret = "test-only-client-secret";
+
     /// <summary>
     /// A syntactically valid connection string that points at a closed local port, so every
     /// connection attempt is refused quickly. Fictitious credentials.
@@ -54,6 +69,9 @@ public class SilvaStockApiFactory(string connectionString, string environment = 
             {
                 [ConnectionStringKey] = ConnectionString,
                 [CorsOriginKey] = TestSiteOrigin,
+                [SiteBaseUrlKey] = TestSiteOrigin,
+                [GoogleClientIdKey] = TestGoogleClientId,
+                [GoogleClientSecretKey] = TestGoogleClientSecret,
             }));
     }
 }

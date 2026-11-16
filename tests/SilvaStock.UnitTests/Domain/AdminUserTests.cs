@@ -50,6 +50,64 @@ public class AdminUserTests
     }
 
     [Fact]
+    public void FirstGoogleLoginBindsTheAccount()
+    {
+        var user = new AdminUser("admin@example.test", displayName: null, _createdAt);
+
+        Assert.False(user.IsBoundTo("google-sub-1"));
+        user.BindGoogleAccount("google-sub-1");
+
+        Assert.Equal("google-sub-1", user.GoogleSub);
+        Assert.True(user.IsBoundTo("google-sub-1"));
+        Assert.False(user.IsBoundTo("GOOGLE-SUB-1"));
+        Assert.False(user.IsBoundTo("google-sub-2"));
+    }
+
+    [Fact]
+    public void BindingTheSameGoogleAccountAgainIsANoOp()
+    {
+        var user = new AdminUser("admin@example.test", displayName: null, _createdAt);
+        user.BindGoogleAccount("google-sub-1");
+
+        user.BindGoogleAccount("google-sub-1");
+
+        Assert.Equal("google-sub-1", user.GoogleSub);
+    }
+
+    [Fact]
+    public void BindingADifferentGoogleAccountIsRejected()
+    {
+        var user = new AdminUser("admin@example.test", displayName: null, _createdAt);
+        user.BindGoogleAccount("google-sub-1");
+
+        Assert.Throws<InvalidOperationException>(() => user.BindGoogleAccount("google-sub-2"));
+        Assert.Equal("google-sub-1", user.GoogleSub);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BlankGoogleSubIsRejected(string sub)
+    {
+        var user = new AdminUser("admin@example.test", displayName: null, _createdAt);
+
+        Assert.Throws<ArgumentException>(() => user.BindGoogleAccount(sub));
+        Assert.Null(user.GoogleSub);
+    }
+
+    [Fact]
+    public void RecordLoginStoresTheTimeInUtc()
+    {
+        var user = new AdminUser("admin@example.test", displayName: null, _createdAt);
+        var lisbonSummer = new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.FromHours(1));
+
+        user.RecordLogin(lisbonSummer);
+
+        Assert.Equal(TimeSpan.Zero, user.LastLoginAt!.Value.Offset);
+        Assert.Equal(lisbonSummer.UtcDateTime, user.LastLoginAt.Value.UtcDateTime);
+    }
+
+    [Fact]
     public void CreatedAtIsStoredInUtc()
     {
         var lisbonSummer = new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.FromHours(1));

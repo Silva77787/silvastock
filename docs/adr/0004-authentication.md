@@ -10,7 +10,7 @@ Only 2–3 administrators, no public sign-up. The alternative (ASP.NET Identity 
 ### Login (Google OpenID Connect)
 - ASP.NET Core OpenID Connect handler: `ResponseType = code`, **`ResponseMode = query`** (so the callback is a top-level `GET /api/auth/callback/google`), `UsePkce = true`, **`SaveTokens = false`** (no Google tokens in the session cookie), `GetClaimsFromUserInfoEndpoint = false`, scopes `openid email profile`. Issuer `https://accounts.google.com` and audience = client ID, validated by the handler. Correlation and nonce cookies are `Secure` (always) and short-lived.
 - The OIDC handler is **never the default challenge scheme**: it is only challenged explicitly by `GET /api/auth/login/google`.
-- After the token is validated:
+- After the token and every protocol check (state, nonce, PKCE) have passed — in `OnTicketReceived`, because the handler runs `OnTokenValidated` before the nonce check:
   1. `email_verified` must be present and equal to `true`; otherwise `not_allowed`.
   2. The email is normalised with `ToLowerInvariant()` and looked up in `admin_users` (unique index on the normalised value); it must exist with `is_active = true`; otherwise `not_allowed`.
   3. **Google account binding:** if `admin_users.google_sub` is null it is set to the token's `sub` (first login); if it is set and differs, `not_allowed`. This stops a different Google account that later owns the same email (e.g. a lapsed custom domain) from signing in.
