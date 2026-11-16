@@ -85,7 +85,8 @@ Number inputs (admin): accept `18900`, `18 900`, `18.900` and `18900,50`; normal
 | Login button | Entrar com Google |
 | Login note | Ao entrar, é usada a sua conta Google. Não guardamos a sua palavra-passe. |
 | `?error=not_allowed` | **Não foi possível entrar.** Esta conta Google não tem acesso ao back office. Se acha que é um erro, fale com o responsável do stand. |
-| 429 | **Demasiadas tentativas.** Aguarde alguns minutos e tente novamente. |
+| `?error=rate_limited` | **Demasiadas tentativas.** Aguarde alguns minutos e tente novamente. |
+| `?error=login_failed` | **Não foi possível entrar.** O início de sessão com o Google foi cancelado ou falhou. Tente novamente. |
 | 401 (session expired, redirected) | **A sua sessão terminou.** Entre novamente para continuar. |
 | Shell | SilvaStock · Back office · Painel · Inventário · Nova viatura · Terminar sessão · menu "Abrir menu" / "Fechar menu" · nav aria-label "Principal" |
 | Dashboard | Painel · Olá, {primeiro nome}. · Total · Rascunho · Publicadas · Vendidas · Ver inventário / Ver rascunhos / Ver publicadas / Ver vendidas · Rascunhos recentes · Ver todos · "Atualizado {data relativa}" |

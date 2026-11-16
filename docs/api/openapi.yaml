@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SilvaStock API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     SilvaStock API (public showroom + back office). Source of truth for the contract
     between backend and frontend; changed only by the main session. Draft: each phase closes its own endpoints with the owner before implementation.
@@ -12,9 +12,19 @@ info:
       (field → messages). User-facing `title`, `detail` and messages are in Portuguese (pt-PT).
     - Pagination: `{ items, page, pageSize, totalCount }`, `page` starts at 1.
     - `/api/admin/*` requires a session cookie for an admin who is active on the allowlist.
-      `POST/PUT/PATCH/DELETE` requests also require the `X-XSRF-TOKEN` header
-      with the value of the `XSRF-TOKEN` cookie (issued by `GET /api/admin/me`).
-      No session → 401; session outside the allowlist/inactive → 403; no antiforgery → 400.
+      `POST/PUT/PATCH/DELETE` requests (admin endpoints and `POST /api/auth/logout`) also
+      require the `X-XSRF-TOKEN` header with the `csrfToken` returned by `GET /api/admin/me`.
+      The site runs on a different host from the API, so it cannot read API cookies: it keeps
+      the token in memory and calls `/api/admin/me` again after a reload.
+      For every method the checks run in this order and the first failure wins:
+      no/invalid/revoked session → 401; not active on the allowlist → 403;
+      missing/invalid antiforgery (unsafe methods) → 400. API calls never redirect.
+      Every `/api/admin/*` response has `Cache-Control: no-store`.
+    - Browser-navigation endpoints (`/api/auth/login/google`, `/api/auth/callback/google`)
+      never return JSON errors: they always redirect to the site, to `{site}/admin/login?error=<code>`
+      on failure (codes: `not_allowed`, `rate_limited`, `login_failed`).
+    - Contract status: **Phase 2 (auth, session, `admin_users`) closed on 2026-11-15** (issue F2-01).
+      Other endpoints remain drafts until their phase closes them.
     - Private fields (`registrationNumber`, `vin`, `internalNotes`) and documents
       never appear in `/api/public/*` responses.
 servers:
@@ -140,51 +150,83 @@ paths:
     get:
       tags: [Auth]
       summary: Starts the Google (OIDC) login
+      description: |
+        Opened by full-page navigation (a plain link), never by `fetch`.
+        `returnUrl` is accepted only if it equals `/admin` or starts with `/admin/` or `/admin?`;
+        it must have no control characters, backslash, `//` or `..` segments (also after
+        percent-decoding), and the resulting absolute URL must stay on the site's origin.
+        Anything else is replaced by `/admin`. It travels only inside the protected OIDC state
+        and is used only after a successful login.
+        Rate limited per client IP (shared with the callback); when exceeded it redirects to
+        `{site}/admin/login?error=rate_limited` instead of returning 429.
       security: []
       parameters:
         - name: returnUrl
           in: query
-          description: Relative path inside `/admin` (validated; absolute URLs are ignored).
-          schema: { type: string, default: /admin }
+          description: Relative path inside `/admin`; invalid values fall back to `/admin`.
+          schema: { type: string, default: /admin, maxLength: 512 }
       responses:
         '302':
-          description: Redirects to Google.
-        '429': { $ref: '#/components/responses/TooManyRequests' }
+          description: |
+            Redirects to Google's authorization endpoint, or to `{site}/admin/login?error=rate_limited`
+            when the rate limit is exceeded.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
 
   /api/auth/callback/google:
     get:
       tags: [Auth]
       summary: Google OIDC callback (handled by the authentication middleware)
       description: |
-        Validates the `id_token`, requires `email_verified = true` and an active record in `admin_users`.
-        Success → creates the session cookie and redirects to `returnUrl`.
-        Failure → does **not** create a session and redirects to `/admin/login?error=not_allowed`
-        (generic message, without revealing whether the email exists).
+        Google redirects here with `?code=…&state=…` (`response_mode=query`). Validates the OIDC
+        response (state, nonce, PKCE, `id_token` issuer/audience), then requires the `email_verified`
+        claim to be present and `true`, an active row in `admin_users` (email lower-cased), and a
+        matching `google_sub` (bound on the first login).
+        - Success → issues the session cookie, updates `admin_users.last_login_at` and redirects to
+          `{site}{returnUrl}`.
+        - Email not verified, not on the allowlist, inactive, or a different Google account
+          (`sub`) → **no** session; redirects to `{site}/admin/login?error=not_allowed`
+          (generic message, never reveals whether the email exists).
+        - Cancelled at Google, invalid/expired state or any other OIDC error → **no** session;
+          redirects to `{site}/admin/login?error=login_failed`. Google's error text is never reflected.
+        - Rate limit exceeded → redirects to `{site}/admin/login?error=rate_limited`.
+        `{site}` is the configured site base URL (e.g. `http://localhost:3000` locally).
       security: []
       responses:
         '302':
-          description: Redirects to the site (success or error).
-        '429': { $ref: '#/components/responses/TooManyRequests' }
+          description: Redirects to the site (success or one of the error codes above).
+          headers:
+            Location:
+              schema: { type: string, format: uri }
 
   /api/auth/logout:
     post:
       tags: [Auth]
       summary: Ends the session
+      description: |
+        Called with `fetch` (credentials included). Increments `admin_users.session_version`, which
+        revokes this admin's sessions **on every device**, and deletes the cookie. Not subject to the
+        allowlist check or to rate limiting. The site then navigates to `/admin/login`.
       security:
         - cookieAuth: []
       parameters:
         - $ref: '#/components/parameters/XsrfHeader'
       responses:
         '204':
-          description: Session ended; cookie removed.
+          description: Session ended; the session cookie is deleted (expired `Set-Cookie`).
+        '400': { $ref: '#/components/responses/AntiforgeryFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ---------------------------------------------------------------- Admin
   /api/admin/me:
     get:
       tags: [Admin]
-      summary: Current session user
-      description: Also issues/renews the `XSRF-TOKEN` cookie used by state-changing requests.
+      summary: Current session user and antiforgery token
+      description: |
+        Used by the back office on load (auth guard). Returns the signed-in admin and a fresh
+        antiforgery token (`csrfToken`) to send as `X-XSRF-TOKEN` on state-changing requests.
+        Responses carry `Cache-Control: no-store`.
       responses:
         '200':
           description: OK
@@ -602,7 +644,15 @@ components:
       type: apiKey
       in: cookie
       name: __Host-silvastock-auth
-      description: HttpOnly, Secure, SameSite=Lax cookie issued after Google login.
+      description: |
+        Session cookie issued by the API after a successful Google login: `HttpOnly`, `Secure`,
+        `SameSite=Lax`, `Path=/`, host-only (API host), persistent. Encrypted with ASP.NET Data
+        Protection (keys persisted in Postgres so sessions survive restarts and scale-to-zero).
+        Lifetime: **30 days, sliding** (renewed on a request made after more than half of the
+        window, so it expires after 15–30 days without use), with an **absolute maximum of 90 days**
+        from the login. On every request the API re-checks the admin in `admin_users`: unknown,
+        revoked (`session_version` changed by logout, `remove-admin` or `reset-google`) or past 90 days → 401;
+        inactive → 403. Both delete the cookie.
 
   parameters:
     VehicleId:
@@ -632,7 +682,7 @@ components:
       name: X-XSRF-TOKEN
       in: header
       required: true
-      description: Value of the `XSRF-TOKEN` cookie.
+      description: The `csrfToken` from `GET /api/admin/me` (ASP.NET antiforgery request token).
       schema: { type: string }
 
   responses:
@@ -642,7 +692,12 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ValidationProblemDetails' }
     Unauthorized:
-      description: No valid session.
+      description: No valid session (missing, expired or invalid cookie). API calls never redirect to Google.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    AntiforgeryFailed:
+      description: Missing or invalid `X-XSRF-TOKEN` on a state-changing request.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
@@ -689,15 +744,6 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
-    TooManyRequests:
-      description: Rate limit exceeded.
-      headers:
-        Retry-After:
-          schema: { type: integer }
-      content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/ProblemDetails' }
-
   schemas:
     HealthStatus:
       type: object
@@ -958,10 +1004,20 @@ components:
     # ---- admin misc
     AdminMe:
       type: object
-      required: [email, displayName]
+      required: [email, displayName, csrfToken]
       properties:
-        email: { type: string, format: email }
-        displayName: { type: string }
+        email: { type: string, format: email, description: Lower-case email from `admin_users`. }
+        displayName:
+          type: string
+          description: |
+            `admin_users.display_name` if set; otherwise the Google account name; otherwise the email.
+        csrfToken:
+          type: string
+          description: Antiforgery token to send as `X-XSRF-TOKEN`. Keep it in memory only.
+      example:
+        email: admin@example.test
+        displayName: Admin Exemplo
+        csrfToken: CfDJ8N…
     Dashboard:
       type: object
       required: [total, draft, published, sold]

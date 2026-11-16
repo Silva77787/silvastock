@@ -38,13 +38,15 @@ Modular monolith. No microservices. No features outside the MVP without justific
 ## 5. Authentication
 - **Google (OIDC)** login + cookie session (`HttpOnly`, `Secure`, `SameSite=Lax`) + antiforgery. No JWT in localStorage.
 - **Allowlist**: `admin_users` table (email). If the Google-verified email is not in the table → reject without creating a session.
-- User management via CLI commands (`add-admin`, `remove-admin`). A management screen comes later.
+- User management via CLI commands (`add-admin`, `remove-admin`, `reset-google`, `list-admins`). A management screen comes later.
 - Check `email_verified`. Rate limiting on login.
 - Every `/api/admin/*` endpoint requires authorisation; tests prove 401/403 without a valid session.
 - **Confirmed by the owner (2026-11-14):** Google (OIDC) login. No email + password (no ASP.NET Identity).
+- **Phase 2 contract closed with the owner (2026-11-15, F2-01):** session cookie lasts **30 days, sliding**, with an **absolute maximum of 90 days**; logout, `remove-admin` and `reset-google` revoke the admin's sessions on every device (`session_version`); each admin is bound to their Google account (`google_sub`) on first login; the antiforgery token is returned by `GET /api/admin/me` (`csrfToken`) and sent as `X-XSRF-TOKEN`; login errors redirect to `/admin/login?error=not_allowed|rate_limited|login_failed`; Data Protection keys persisted in Postgres; `AllowedHosts` restricted in production; display name falls back to the Google account name. Details: ADR-0004 and `openapi.yaml`.
 
 ## 6. Data model (PostgreSQL)
-- `admin_users`: id, email (unique), display_name, is_active, created_at.
+- `admin_users`: id, email (unique, stored lower-case), display_name, is_active, created_at; added in F2-01: `last_login_at timestamptz NULL`, `session_version integer NOT NULL DEFAULT 0`, `google_sub text NULL UNIQUE`.
+- `data_protection_keys`: id (int, framework-owned — exception to the bigint rule), friendly_name, xml — ASP.NET Data Protection key ring (added in F2-01; ADR-0004).
 - `vehicles`: **id bigint identity (PK)**, status (Draft|Published|Sold, CHECK), published_at, sold_at,
   make, model, version, year, mileage_km, price (decimal 10,2), price_on_request, fuel, transmission,
   engine_cc, power_kw, body_type, color (exterior), interior_color, doors, seats, drivetrain, emissions, description,
