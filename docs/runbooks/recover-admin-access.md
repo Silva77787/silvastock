@@ -26,7 +26,7 @@ $env:ConnectionStrings__Default = Read-Host "Connection string"
 ```
 Use the Neon connection string with `SSL Mode=Require`.
 
-> **Check the target before every command.** If the variable is empty (for example after an empty `Read-Host` on Windows), the CLI falls back to your **local** user-secrets database. Every command prints the target host, database and source (`environment` or `user-secrets`) to stderr: make sure it says `environment` and the Neon host before trusting the result. When you are done, close the terminal, or run `unset ConnectionStrings__Default` (Bash) / `Remove-Item Env:ConnectionStrings__Default` (PowerShell).
+> **Check the target before every command.** If the variable is empty (for example after an empty `Read-Host` on Windows), the CLI falls back to your **local** user-secrets database. Every command first prints `Target database: Host=…, Port=…, Database=… (source: …)` to stderr: make sure the source is `environment variable ConnectionStrings__Default` and the host is the Neon one before trusting the result. When you are done, close the terminal, or run `unset ConnectionStrings__Default` (Bash) / `Remove-Item Env:ConnectionStrings__Default` (PowerShell).
 
 ## 2. See who has access
 ```bash
