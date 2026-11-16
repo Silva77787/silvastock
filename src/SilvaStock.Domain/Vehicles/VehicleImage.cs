@@ -17,12 +17,23 @@ public sealed class VehicleImage
         string contentType,
         long sizeBytes,
         int sortOrder,
-        bool isPrimary)
+        bool isPrimary,
+        int? width = null,
+        int? height = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(objectKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(thumbKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
         ArgumentOutOfRangeException.ThrowIfNegative(sizeBytes);
+        if (width is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width.Value, nameof(width));
+        }
+
+        if (height is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height.Value, nameof(height));
+        }
 
         VehicleId = vehicleId;
         ObjectKey = objectKey;
@@ -31,6 +42,8 @@ public sealed class VehicleImage
         SizeBytes = sizeBytes;
         SortOrder = sortOrder;
         IsPrimary = isPrimary;
+        Width = width;
+        Height = height;
     }
 
     public long Id { get; private set; }
@@ -50,4 +63,10 @@ public sealed class VehicleImage
     public int SortOrder { get; private set; }
 
     public bool IsPrimary { get; private set; }
+
+    /// <summary>Width in pixels of the re-encoded image; null when unknown.</summary>
+    public int? Width { get; private set; }
+
+    /// <summary>Height in pixels of the re-encoded image; null when unknown.</summary>
+    public int? Height { get; private set; }
 }

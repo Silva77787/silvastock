@@ -46,6 +46,25 @@ public class VehicleTests
         Assert.Equal(_admin, vehicle.CreatedBy);
     }
 
+    [Theory]
+    [InlineData(0, 100)]
+    [InlineData(100, 0)]
+    [InlineData(-1, null)]
+    public void ImageDimensionsMustBePositiveWhenSet(int? width, int? height)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new VehicleImage(1, "a.webp", "a-thumb.webp", "image/webp", 10, 0, true, width, height));
+    }
+
+    [Fact]
+    public void ImageDimensionsAreOptional()
+    {
+        var image = new VehicleImage(1, "a.webp", "a-thumb.webp", "image/webp", 10, 0, true);
+
+        Assert.Null(image.Width);
+        Assert.Null(image.Height);
+    }
+
     [Fact]
     public void EnumMemberNamesMatchTheApiContract()
     {

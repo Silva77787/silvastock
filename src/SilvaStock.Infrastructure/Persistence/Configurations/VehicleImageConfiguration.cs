@@ -8,7 +8,11 @@ internal sealed class VehicleImageConfiguration : IEntityTypeConfiguration<Vehic
 {
     public void Configure(EntityTypeBuilder<VehicleImage> builder)
     {
-        builder.ToTable("vehicle_images");
+        builder.ToTable("vehicle_images", table =>
+        {
+            table.HasCheckConstraint("ck_vehicle_images_width", "width > 0");
+            table.HasCheckConstraint("ck_vehicle_images_height", "height > 0");
+        });
 
         builder.HasKey(i => i.Id);
 
@@ -19,6 +23,10 @@ internal sealed class VehicleImageConfiguration : IEntityTypeConfiguration<Vehic
         builder.Property(i => i.SizeBytes).IsRequired();
         builder.Property(i => i.SortOrder).IsRequired();
         builder.Property(i => i.IsPrimary).IsRequired();
+
+        // Optional pixel size (openapi.yaml); NULL passes the CHECKs above.
+        builder.Property(i => i.Width);
+        builder.Property(i => i.Height);
 
         // Gallery order; also serves the foreign key lookups on vehicle_id.
         builder.HasIndex(i => new { i.VehicleId, i.SortOrder });

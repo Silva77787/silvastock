@@ -197,6 +197,59 @@ public sealed class SchemaTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ImageDimensionsRoundTripAndMayBeNull()
+    {
+        long vehicleId;
+        await using (var context = MigratedDatabase.CreateContext(postgres))
+        {
+            var vehicle = NewVehicle();
+            context.Vehicles.Add(vehicle);
+            await context.SaveChangesAsync();
+            vehicleId = vehicle.Id;
+
+            context.VehicleImages.AddRange(
+                new VehicleImage(vehicleId, "vehicles/a.webp", "vehicles/a-thumb.webp", "image/webp", 2048, 0, true, width: 1600, height: 1200),
+                NewImage(vehicleId, sortOrder: 1, isPrimary: false));
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = MigratedDatabase.CreateContext(postgres))
+        {
+            var images = await context.VehicleImages
+                .Where(i => i.VehicleId == vehicleId)
+                .OrderBy(i => i.SortOrder)
+                .ToListAsync();
+
+            Assert.Equal(1600, images[0].Width);
+            Assert.Equal(1200, images[0].Height);
+            Assert.Null(images[1].Width);
+            Assert.Null(images[1].Height);
+        }
+    }
+
+    [Theory]
+    [InlineData("width", "ck_vehicle_images_width")]
+    [InlineData("height", "ck_vehicle_images_height")]
+    public async Task ImageDimensionsMustBePositive(string column, string constraint)
+    {
+        await using var context = MigratedDatabase.CreateContext(postgres);
+        var vehicle = NewVehicle();
+        context.Vehicles.Add(vehicle);
+        await context.SaveChangesAsync();
+        context.VehicleImages.Add(NewImage(vehicle.Id, sortOrder: 0, isPrimary: true));
+        await context.SaveChangesAsync();
+
+        // Column names come from InlineData constants, never from input.
+#pragma warning disable EF1002
+        var ex = await Assert.ThrowsAsync<PostgresException>(() => context.Database.ExecuteSqlRawAsync(
+            $"UPDATE vehicle_images SET {column} = 0"));
+#pragma warning restore EF1002
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, ex.SqlState);
+        Assert.Equal(constraint, ex.ConstraintName);
+    }
+
+    [Fact]
     public async Task VehicleDataRoundTrips()
     {
         long id;
