@@ -10,7 +10,7 @@ Administrators are managed only with the `silvastock` CLI (DECISIONS §5, ADR-00
 
 ## Before you start
 - **Code and tools:** you need the .NET 10 SDK and a clone of the repository at the commit currently deployed (`git checkout main && git pull`).
-- **Production connection string:** take the Neon connection string from the place where it is kept securely: the password manager, or the Azure Container Apps secret / GitHub secret `ConnectionStrings__Default`.
+- **Production connection string:** read the Neon connection string from the password manager, or from the Azure Container Apps secret (needs an Azure role that can read secrets). It is also stored as a GitHub Actions secret, but those are write-only and cannot be read back.
   - Never paste it into a file in the repository, a command argument, a chat or an issue.
   - The CLI reads it **only** from the environment variable `ConnectionStrings__Default`, or, for local development, from the API project's user-secrets (`ConnectionStrings:Default`). It never prints it.
 - **Migrations:** the CLI does **not** apply them. If it fails with `SQLSTATE 42P01`, the database schema is missing: apply the migrations through the normal deploy step first.
@@ -24,7 +24,9 @@ PowerShell:
 ```powershell
 $env:ConnectionStrings__Default = Read-Host "Connection string"
 ```
-Use the Neon connection string with `SSL Mode=Require`. When you are done, close the terminal, or run `unset ConnectionStrings__Default` (Bash) / `Remove-Item Env:ConnectionStrings__Default` (PowerShell).
+Use the Neon connection string with `SSL Mode=Require`.
+
+> **Check the target before every command.** If the variable is empty (for example after an empty `Read-Host` on Windows), the CLI falls back to your **local** user-secrets database. Every command prints the target host, database and source (`environment` or `user-secrets`) to stderr: make sure it says `environment` and the Neon host before trusting the result. When you are done, close the terminal, or run `unset ConnectionStrings__Default` (Bash) / `Remove-Item Env:ConnectionStrings__Default` (PowerShell).
 
 ## 2. See who has access
 ```bash
