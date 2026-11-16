@@ -12,7 +12,7 @@ using SilvaStock.Infrastructure.Persistence;
 namespace SilvaStock.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(SilvaStockDbContext))]
-    [Migration("20261116111209_InitialCreate")]
+    [Migration("20261116111857_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -23,7 +23,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+            NpgsqlModelBuilderExtensions.UseIdentityAlwaysColumns(modelBuilder);
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
                 {
@@ -32,7 +32,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<int>("Id"));
 
                     b.Property<string>("FriendlyName")
                         .HasColumnType("text")
@@ -55,7 +55,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -114,7 +114,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
@@ -171,7 +171,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
 
                     b.Property<string>("BodyType")
                         .HasColumnType("text")
@@ -350,7 +350,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Category")
                         .IsRequired()
@@ -412,7 +412,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
 
                     b.Property<string>("ContentType")
                         .IsRequired()

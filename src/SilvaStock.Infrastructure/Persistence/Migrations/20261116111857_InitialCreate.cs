@@ -17,7 +17,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
                     email = table.Column<string>(type: "character varying(254)", maxLength: 254, nullable: false),
                     display_name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
@@ -37,7 +37,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
                     at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     actor = table.Column<string>(type: "character varying(254)", maxLength: 254, nullable: false),
                     entity = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
@@ -58,7 +58,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
                     friendly_name = table.Column<string>(type: "text", nullable: true),
                     xml = table.Column<string>(type: "text", nullable: true)
                 },
@@ -72,7 +72,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
                     status = table.Column<string>(type: "text", nullable: false),
                     published_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     sold_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
@@ -119,7 +119,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
                     vehicle_id = table.Column<long>(type: "bigint", nullable: false),
                     category = table.Column<string>(type: "text", nullable: false),
                     display_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
@@ -146,7 +146,7 @@ namespace SilvaStock.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
                     vehicle_id = table.Column<long>(type: "bigint", nullable: false),
                     object_key = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
                     thumb_key = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
