@@ -23,7 +23,7 @@ services:
   # S3-compatible object storage (RustFS) standing in for Cloudflare R2.
   # The plain 1.0.5 tag fails to start (missing container user); the glibc variant works.
   s3:
-    image: rustfs/rustfs:1.0.5-glibc
+    image: rustfs/rustfs:1.0.6-glibc
     restart: unless-stopped
     environment:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
