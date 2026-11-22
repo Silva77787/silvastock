@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup Label="Data">
-    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Npgsql" Version="11.0.0" />
     <!-- EF Core provider for PostgreSQL (ADR-0003); 10.0.3 is built against Npgsql 10.0.3. -->
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <!-- Pin EF Core to one patch level across the provider, Data Protection and design-time packages. -->
